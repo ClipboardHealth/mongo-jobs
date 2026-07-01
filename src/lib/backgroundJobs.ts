@@ -148,7 +148,7 @@ export class BackgroundJobs {
    * This method is useful if you have a job that exhausted its attempts limit
    * but you want to run it again. By calling this method you will bring the
    * attempts count of the job to 0 and set the next run time to current time
-   * (so the job will be picked up as soon as possible).
+   * (so the job will be picked up as soon as possible by the consumer).
    **/
   public async retryJobById(jobId: string) {
     const jobObjectId = new mongoose.Types.ObjectId(jobId);

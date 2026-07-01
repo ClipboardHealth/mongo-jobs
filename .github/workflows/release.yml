@@ -9,7 +9,14 @@ concurrency:
   group: release
 
 jobs:
+  # Re-run the full verification on main before publishing: a green PR can go
+  # stale by the time it merges.
+  verify:
+    uses: ./.github/workflows/verify.yml
+    secrets: inherit
+
   release:
+    needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -39,15 +46,6 @@ jobs:
       - run: npm ci
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-      # Re-verify on main before publishing: a green PR can still go stale by the
-      # time it merges.
-      - name: Start MongoDB
-        run: docker compose up -d --wait
-      - run: npm run typecheck
-      - run: npm run lint
-      - run: npm test
-      - if: always()
-        run: docker compose down --volumes
       - run: |
           git config user.name "GitHub Bot"
           git config user.email "open-source@clipboardhealth.com"

@@ -31,10 +31,6 @@ const publishPkg = {
   publishConfig: pkg.publishConfig,
   dependencies: pkg.dependencies,
   peerDependencies: pkg.peerDependencies,
-  // Intentionally omit `engines`: the historical core-utils package declared
-  // none, and shipping `node >=24` would fail `npm ci` for consumers on older
-  // node with engine-strict enabled. The repo's own package.json keeps it for
-  // local dev.
 };
 
 writeFileSync(join(dist, "package.json"), `${JSON.stringify(publishPkg, null, 2)}\n`);

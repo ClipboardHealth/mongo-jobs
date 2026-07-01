@@ -1,0 +1,24 @@
+{
+  "extends": ["@tsconfig/node24/tsconfig.json", "@tsconfig/strictest/tsconfig.json"],
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "node10",
+    "target": "es2024",
+    "lib": ["es2024"],
+    "types": ["node", "vitest/globals"],
+    "importHelpers": true,
+    "sourceMap": true,
+    "declaration": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "paths": {
+      "@clipboard-health/mongo-jobs": ["./src/index.ts"]
+    },
+    "outDir": "dist",
+    "rootDir": "."
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"],
+  "exclude": ["node_modules", "dist", "examples"]
+}

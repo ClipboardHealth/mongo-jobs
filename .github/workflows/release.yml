@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  cancel-in-progress: false
+  group: release
+
+permissions:
+  contents: read
+
+jobs:
+  # Re-run the full verification on main before publishing: a green PR can go
+  # stale by the time it merges.
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/verify
+        with:
+          npm_token: ${{ secrets.NPM_TOKEN }}
+
+  release:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # create tags, releases, and push the release commit
+      issues: write # comment on released issues
+      pull-requests: write # comment on released PRs
+      id-token: write # npm provenance
+    steps:
+      # Authenticate as a GitHub App so the release commit/tag is pushed with
+      # elevated credentials that can bypass branch protection on main
+      # (the default GITHUB_TOKEN cannot, and its pushes never trigger workflows).
+      - id: token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0
+          # Don't persist the App token to .git/config: npm ci below could run a
+          # malicious dependency postinstall that reads it. semantic-release
+          # authenticates its push from the GITHUB_TOKEN env instead.
+          persist-credentials: false
+          token: ${{ steps.token.outputs.token }}
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version-file: .nvmrc
+          registry-url: https://registry.npmjs.org
+          cache: npm
+      - run: npm ci
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: |
+          git config user.name "GitHub Bot"
+          git config user.email "open-source@clipboardhealth.com"
+      # Determines the next version from conventional commits since the last tag,
+      # builds the publish-ready dist/, publishes to npm, and creates the GitHub
+      # release. No-ops when there are no release-worthy commits.
+      - run: npx semantic-release
+        env:
+          GITHUB_TOKEN: ${{ steps.token.outputs.token }}
+          NPM_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}

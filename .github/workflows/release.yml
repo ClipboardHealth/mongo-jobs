@@ -12,8 +12,13 @@ jobs:
   # Re-run the full verification on main before publishing: a green PR can go
   # stale by the time it merges.
   verify:
-    uses: ./.github/workflows/verify.yml
-    secrets: inherit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: ./.github/actions/verify
+        with:
+          npm_token: ${{ secrets.NPM_TOKEN }}
 
   release:
     needs: verify

@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.number || github.ref }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          registry-url: https://registry.npmjs.org
+          cache: npm
+      - run: npm ci
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # The library requires a MongoDB replica set (transactions / change streams).
+      # docker-compose starts a single-node replica set that self-initiates via its
+      # healthcheck; wait for it to become healthy before running the suite.
+      - name: Start MongoDB
+        run: docker compose up -d --wait
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - if: always()
+        run: docker compose down --volumes
+
+  release:
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # create tags, releases, and push the release commit
+      issues: write # comment on released issues
+      pull-requests: write # comment on released PRs
+      id-token: write # npm provenance
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          registry-url: https://registry.npmjs.org
+          cache: npm
+      - run: npm ci
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # Determines the next version from conventional commits since the last tag,
+      # builds the publish-ready dist/, publishes to npm, and creates the GitHub
+      # release. No-ops when there are no release-worthy commits.
+      - run: npx semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

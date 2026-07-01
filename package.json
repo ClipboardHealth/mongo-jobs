@@ -1,0 +1,74 @@
+{
+  "name": "@clipboard-health/mongo-jobs",
+  "version": "2.7.7",
+  "description": "MongoDB-powered background jobs.",
+  "keywords": [
+    "mongodb",
+    "mongoose",
+    "background-jobs",
+    "job-queue",
+    "cron",
+    "worker"
+  ],
+  "bugs": "https://github.com/ClipboardHealth/mongo-jobs/issues",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ClipboardHealth/mongo-jobs.git"
+  },
+  "type": "commonjs",
+  "main": "./src/index.js",
+  "typings": "./src/index.d.ts",
+  "types": "./src/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "clean": "rm -rf dist",
+    "prepare-package": "node scripts/prepare-package.mjs",
+    "package": "node --run clean && node --run build && node --run prepare-package",
+    "typecheck": "tsc --noEmit && tsc --noEmit --project tsconfig.examples.json",
+    "lint": "oxlint",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verify": "node --run typecheck && node --run lint && node --run test",
+    "release": "semantic-release"
+  },
+  "dependencies": {
+    "cron-parser": "5.6.1",
+    "hot-shots": "16.0.0",
+    "tslib": "2.8.1"
+  },
+  "devDependencies": {
+    "@clipboard-health/util-ts": "5.9.7",
+    "@opentelemetry/api": "1.9.1",
+    "@semantic-release/changelog": "6.0.3",
+    "@semantic-release/commit-analyzer": "13.0.1",
+    "@semantic-release/exec": "7.1.0",
+    "@semantic-release/git": "10.0.1",
+    "@semantic-release/github": "12.0.8",
+    "@semantic-release/release-notes-generator": "14.1.1",
+    "@tsconfig/node24": "24.0.4",
+    "@tsconfig/strictest": "2.0.8",
+    "@types/node": "24.13.2",
+    "@vitest/coverage-v8": "4.1.9",
+    "mongodb": "6.20.0",
+    "mongoose": "8.24.1",
+    "oxfmt": "0.56.0",
+    "oxlint": "1.71.0",
+    "semantic-release": "25.0.5",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
+  },
+  "peerDependencies": {
+    "@opentelemetry/api": ">=1.0",
+    "mongodb": ">=6.9",
+    "mongoose": ">=8.7"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

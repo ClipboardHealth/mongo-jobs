@@ -1,3 +1,10 @@
+## [2.7.9](https://github.com/ClipboardHealth/mongo-jobs/compare/v2.7.8...v2.7.9) (2026-07-06)
+
+
+### Bug Fixes
+
+* trim published artifact to match the historical package ([#8](https://github.com/ClipboardHealth/mongo-jobs/issues/8)) ([4310361](https://github.com/ClipboardHealth/mongo-jobs/commit/4310361cf7f7d5634243f71ea9511abeff2d5c3e))
+
 ## [2.7.8](https://github.com/ClipboardHealth/mongo-jobs/compare/v2.7.7...v2.7.8) (2026-07-01)
 
 

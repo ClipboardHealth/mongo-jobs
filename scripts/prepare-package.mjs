@@ -31,7 +31,6 @@ const publishPkg = {
   publishConfig: pkg.publishConfig,
   dependencies: pkg.dependencies,
   peerDependencies: pkg.peerDependencies,
-  engines: pkg.engines,
 };
 
 writeFileSync(join(dist, "package.json"), `${JSON.stringify(publishPkg, null, 2)}\n`);

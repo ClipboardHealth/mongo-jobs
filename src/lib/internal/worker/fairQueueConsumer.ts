@@ -80,8 +80,6 @@ export class FairQueueConsumer extends EventTarget implements QueueConsumer {
       this.dispatchNewJobEvent();
     });
 
-    // A ChangeStream is an EventEmitter; without an "error" listener a non-resumable
-    // stream error would crash the worker process with an unhandled "error" event.
     stream.on("error", (error: unknown) => {
       this.handleChangeStreamError(stream, error);
     });
@@ -128,8 +126,6 @@ export class FairQueueConsumer extends EventTarget implements QueueConsumer {
   ) {
     this.logger?.error(`FairQueueConsumer change stream error: ${errorMessage(error)}`);
 
-    // Ignore errors from a stream we already replaced or tore down, and don't recreate
-    // after the consumer has been stopped. Interval polling keeps jobs flowing regardless.
     if (this.stopped || this.jobsChangeStream !== stream) {
       return;
     }

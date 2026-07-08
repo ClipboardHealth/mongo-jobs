@@ -52,7 +52,6 @@ describe(FairQueueConsumer, () => {
     expect(logger.errorLogs[0]!.message).toContain("non-resumable");
     expect(streams[0]!.close).toHaveBeenCalledOnce();
 
-    // Stream is recreated only after the backoff elapses.
     expect(watchUpserts).toHaveBeenCalledTimes(1);
     vi.advanceTimersByTime(BASE_DELAY_MS);
     expect(watchUpserts).toHaveBeenCalledTimes(2);
@@ -61,14 +60,12 @@ describe(FairQueueConsumer, () => {
   it("uses exponential backoff between consecutive failures", () => {
     consumer.startListeningForQueueChanges();
 
-    // First failure waits the base delay.
     latestStream().emit("error", new Error("fail 1"));
     vi.advanceTimersByTime(BASE_DELAY_MS - 1);
     expect(watchUpserts).toHaveBeenCalledTimes(1);
     vi.advanceTimersByTime(1);
     expect(watchUpserts).toHaveBeenCalledTimes(2);
 
-    // Second consecutive failure waits twice as long.
     latestStream().emit("error", new Error("fail 2"));
     vi.advanceTimersByTime(BASE_DELAY_MS * 2 - 1);
     expect(watchUpserts).toHaveBeenCalledTimes(2);
@@ -79,16 +76,13 @@ describe(FairQueueConsumer, () => {
   it("gives up and logs after the maximum number of retries, then stops recreating", () => {
     consumer.startListeningForQueueChanges();
 
-    // Fail every recreated stream. MAX_DELAY_MS covers any capped backoff delay.
     for (let attempt = 0; attempt < MAX_RETRIES; attempt += 1) {
       latestStream().emit("error", new Error(`fail ${attempt}`));
       vi.advanceTimersByTime(MAX_DELAY_MS);
     }
 
-    // Initial stream + MAX_RETRIES recreations.
     expect(watchUpserts).toHaveBeenCalledTimes(MAX_RETRIES + 1);
 
-    // One more failure exhausts the budget: it gives up instead of recreating.
     latestStream().emit("error", new Error("final"));
     vi.advanceTimersByTime(MAX_DELAY_MS);
 
@@ -99,17 +93,14 @@ describe(FairQueueConsumer, () => {
   it("resets the retry budget once the recreated stream delivers a change", () => {
     consumer.startListeningForQueueChanges();
 
-    // One failure advances the backoff to the second step (2 * base).
     latestStream().emit("error", new Error("fail 1"));
     vi.advanceTimersByTime(BASE_DELAY_MS);
     expect(watchUpserts).toHaveBeenCalledTimes(2);
 
-    // A delivered change proves the stream recovered and resets the budget.
     latestStream().emit("change", {
       fullDocument: { queue: "default", nextRunAt: new Date() },
     });
 
-    // The next failure therefore waits the base delay again, not the doubled one.
     latestStream().emit("error", new Error("fail 2"));
     vi.advanceTimersByTime(BASE_DELAY_MS);
     expect(watchUpserts).toHaveBeenCalledTimes(3);
@@ -118,10 +109,8 @@ describe(FairQueueConsumer, () => {
   it("cancels a pending stream recreation when the consumer is stopped", async () => {
     consumer.startListeningForQueueChanges();
 
-    // Error schedules a recreation after the backoff.
     latestStream().emit("error", new Error("non-resumable"));
 
-    // Stopping before the backoff elapses must cancel the pending recreation.
     await consumer.stop();
     vi.advanceTimersByTime(MAX_DELAY_MS);
 

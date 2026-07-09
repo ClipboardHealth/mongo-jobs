@@ -1,3 +1,10 @@
+## [2.7.11](https://github.com/ClipboardHealth/mongo-jobs/compare/v2.7.10...v2.7.11) (2026-07-09)
+
+
+### Bug Fixes
+
+* handle ChangeStream 'error' events in FairQueueConsumer ([#10](https://github.com/ClipboardHealth/mongo-jobs/issues/10)) ([9373d0a](https://github.com/ClipboardHealth/mongo-jobs/commit/9373d0a671d124057c177db0390c7bb03cff611b))
+
 ## [2.7.10](https://github.com/ClipboardHealth/mongo-jobs/compare/v2.7.9...v2.7.10) (2026-07-09)
 
 

@@ -1,3 +1,10 @@
+## [2.7.10](https://github.com/ClipboardHealth/mongo-jobs/compare/v2.7.9...v2.7.10) (2026-07-09)
+
+
+### Bug Fixes
+
+* **release:** keep package-lock.json version in sync on release ([#11](https://github.com/ClipboardHealth/mongo-jobs/issues/11)) ([9004b97](https://github.com/ClipboardHealth/mongo-jobs/commit/9004b97625b42581a09dd56f807fee3e51d29b82))
+
 ## [2.7.9](https://github.com/ClipboardHealth/mongo-jobs/compare/v2.7.8...v2.7.9) (2026-07-06)
 
 

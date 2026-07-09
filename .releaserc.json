@@ -12,14 +12,14 @@
     [
       "@semantic-release/exec",
       {
-        "prepareCmd": "npm pkg set version=${nextRelease.version} && node --run package",
+        "prepareCmd": "npm version ${nextRelease.version} --no-git-tag-version && node --run package",
         "publishCmd": "npm publish ./dist --access public"
       }
     ],
     [
       "@semantic-release/git",
       {
-        "assets": ["package.json", "CHANGELOG.md"],
+        "assets": ["package.json", "package-lock.json", "CHANGELOG.md"],
         "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
       }
     ],

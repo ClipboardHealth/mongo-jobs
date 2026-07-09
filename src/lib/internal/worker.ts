@@ -4,6 +4,7 @@ import type { BackgroundJobType } from "../job";
 import { withConsumerTrace, withInternalsTrace } from "../tracing";
 import type { Cron } from "./cron";
 import { DuplicateRunningError } from "./duplicateRunningError";
+import { errorMessage } from "./errorMessage";
 import type { JobsRepository } from "./jobsRepository";
 import type { Logger } from "./logger";
 import type { Metrics } from "./metrics";
@@ -41,18 +42,6 @@ const DEFAULT_REFRESH_QUEUES_INTERVAL = 30 * MILLIS_IN_SECOND; // 30 seconds
 const DUPLICATE_RESCHEDULE_TIME = 5 * MILLIS_IN_SECOND; // 5 seconds
 const DEFAULT_MAX_ATTEMPTS = 10;
 const GRACEFUL_SHUTDOWN_WAIT = 30 * MILLIS_IN_SECOND; // 30 seconds
-
-function errorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  if (typeof error === "string") {
-    return error;
-  }
-
-  return JSON.stringify(error);
-}
 
 function errorToString(error: unknown): string {
   if (error instanceof Error) {
@@ -132,7 +121,7 @@ export class Worker {
       }
     }
 
-    this.queueConsumer = new FairQueueConsumer(queues, options.jobsRepo);
+    this.queueConsumer = new FairQueueConsumer(queues, options.jobsRepo, this.logger);
   }
 
   public async start() {

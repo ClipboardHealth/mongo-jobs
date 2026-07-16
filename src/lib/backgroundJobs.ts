@@ -169,4 +169,19 @@ export class BackgroundJobs {
     const jobObjectIds = jobIds.map((jobId) => new mongoose.Types.ObjectId(jobId));
     await this.jobsRepo.deleteJobs(jobObjectIds, options);
   }
+
+  /**
+   * Cancel an enqueued job by its unique key
+   *
+   * This method will remove the job with the given unique key from the DB and
+   * return it, preventing the job from being executed. If no job with the key
+   * exists, or the job is currently running, nothing is removed and
+   * `undefined` is returned. Cancelling a job that failed and is waiting to be
+   * retried prevents the retry, but its earlier attempts have already run.
+   * Jobs are matched by their current `uniqueKey`, which changes from
+   * `enqueuedKey` to `runningKey` once the job first starts.
+   **/
+  public async cancelEnqueuedByKey(key: string, options: SessionOptions = {}) {
+    return await this.jobsRepo.deleteEnqueuedJobByKey(key, options);
+  }
 }

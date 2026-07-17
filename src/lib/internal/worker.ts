@@ -305,6 +305,7 @@ export class Worker {
         }
       } finally {
         this.runningJobs.delete(job._id);
+        this.queueConsumer.release(job);
         jobPromiseResolve();
         void this.workerLoop();
       }

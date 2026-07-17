@@ -7,29 +7,33 @@ describe(ActionableQueues, () => {
     actionableQueues = new ActionableQueues();
   });
 
-  it("when 1 queue is added then getRandom will return that queue", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("returns the only actionable queue", () => {
     const queue = "myQueue";
     actionableQueues.add(queue);
 
-    expect(actionableQueues.getRandom()).toBe(queue);
+    expect(actionableQueues.getLeastInFlight()).toBe(queue);
   });
 
-  it("when queue is added and then removed then getRandom will return undefined", () => {
+  it("returns undefined when the only actionable queue is removed", () => {
     const queue = "myQueue";
     actionableQueues.add(queue);
     actionableQueues.remove(queue);
 
-    expect(actionableQueues.getRandom()).toBeUndefined();
+    expect(actionableQueues.getLeastInFlight()).toBeUndefined();
   });
 
-  it("when queue is added multiple times and then removed once then as a result we get undefined on getRandom", () => {
+  it("treats repeated additions as idempotent", () => {
     const queue = "myQueue";
     actionableQueues.add(queue);
     actionableQueues.add(queue);
     actionableQueues.add(queue);
     actionableQueues.remove(queue);
 
-    expect(actionableQueues.getRandom()).toBeUndefined();
+    expect(actionableQueues.getLeastInFlight()).toBeUndefined();
   });
 
   it("will return proper queue in a complex add and remove scenario", () => {
@@ -59,6 +63,67 @@ describe(ActionableQueues, () => {
     // Queue3
     actionableQueues.remove(queue1);
 
-    expect(actionableQueues.getRandom()).toBe(queue3);
+    expect(actionableQueues.getLeastInFlight()).toBe(queue3);
+  });
+
+  it("prefers the actionable queue with fewer jobs in flight", () => {
+    actionableQueues.add("slow");
+    actionableQueues.add("fast");
+
+    actionableQueues.acquire("slow");
+
+    expect(actionableQueues.getLeastInFlight()).toBe("fast");
+  });
+
+  it("randomly selects among queues tied for least in flight", () => {
+    actionableQueues.add("slow");
+    actionableQueues.add("fast");
+    vi.spyOn(Math, "random").mockReturnValue(0.99);
+
+    expect(actionableQueues.getLeastInFlight()).toBe("fast");
+  });
+
+  it("returns to random selection after the only in-flight job is released", () => {
+    actionableQueues.add("slow");
+    actionableQueues.add("fast");
+    actionableQueues.acquire("slow");
+    actionableQueues.release("slow");
+    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+
+    actionableQueues.getLeastInFlight();
+
+    expect(random).toHaveBeenCalledOnce();
+  });
+
+  it("remains work-conserving when only one queue is actionable", () => {
+    actionableQueues.add("slow");
+
+    actionableQueues.acquire("slow");
+    expect(actionableQueues.getLeastInFlight()).toBe("slow");
+
+    actionableQueues.acquire("slow");
+    expect(actionableQueues.getLeastInFlight()).toBe("slow");
+  });
+
+  it("makes a released queue least loaded", () => {
+    actionableQueues.add("slow");
+    actionableQueues.add("fast");
+    actionableQueues.acquire("slow");
+    actionableQueues.acquire("fast");
+
+    actionableQueues.release("slow");
+
+    expect(actionableQueues.getLeastInFlight()).toBe("slow");
+  });
+
+  it("continues tracking in-flight jobs while a queue is not actionable", () => {
+    actionableQueues.add("queue");
+    actionableQueues.acquire("queue");
+    actionableQueues.remove("queue");
+    actionableQueues.release("queue");
+
+    actionableQueues.add("queue");
+
+    expect(actionableQueues.getLeastInFlight()).toBe("queue");
   });
 });

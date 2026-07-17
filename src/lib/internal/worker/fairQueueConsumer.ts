@@ -191,7 +191,7 @@ export class FairQueueConsumer extends EventTarget implements QueueConsumer {
     let job;
 
     while (!job) {
-      const queue = this.actionableQueues.getRandom();
+      const queue = this.actionableQueues.getLeastInFlight();
 
       if (queue === undefined) {
         return undefined;
@@ -203,10 +203,18 @@ export class FairQueueConsumer extends EventTarget implements QueueConsumer {
       if (!job) {
         // eslint-disable-next-line no-await-in-loop
         await this.removeQueueFromActionable(queue);
+      } else {
+        this.actionableQueues.acquire(queue);
       }
     }
 
     return job;
+  }
+
+  public release(job: BackgroundJobType<unknown>): void {
+    if (job.queue !== undefined) {
+      this.actionableQueues.release(job.queue);
+    }
   }
 
   public getConsumedQueues(): string[] {

@@ -697,7 +697,7 @@ describe("Helper APIs", () => {
     await expect(backgroundJobs.cancelEnqueuedByKey("missing-job")).resolves.toBeUndefined();
   });
 
-  it("does not cancel a running job", async () => {
+  it("leaves a running job unchanged", async () => {
     const job = ensureExistence(
       await backgroundJobs.enqueue(
         ExampleJob,
@@ -705,7 +705,10 @@ describe("Helper APIs", () => {
         { unique: "running-example-job" },
       ),
     );
-    await backgroundJobs.jobModel.updateOne({ _id: job._id }, { lockedAt: new Date() });
+    await backgroundJobs.jobModel.updateOne(
+      { _id: job._id },
+      { lockedAt: new Date("2026-01-01T00:00:00.000Z") },
+    );
 
     await expect(
       backgroundJobs.cancelEnqueuedByKey("running-example-job"),
@@ -755,7 +758,7 @@ describe("Helper APIs", () => {
     await expect(backgroundJobs.getJobById(job._id.toString())).resolves.toBeNull();
   });
 
-  it("does not cancel a job when the transaction is aborted", async () => {
+  it("preserves the job when the cancellation transaction is aborted", async () => {
     const job = ensureExistence(
       await backgroundJobs.enqueue(
         ExampleJob,

@@ -550,29 +550,21 @@ await backgroundJobs.enqueue(
 - Uniqueness is enforced via MongoDB unique index on the `uniqueKey` field
 - Cron jobs automatically use unique keys based on schedule name and timestamp
 
-### Cancelling an enqueued job by key
+### Cancelling an enqueued job by unique key
 
-Cancel an enqueued job without querying the underlying MongoDB model:
+Cancel one enqueued job by its `uniqueKey`:
 
 ```ts
 const job = await backgroundJobs.cancelEnqueuedByKey("process-user-123");
-
-if (job) {
-  console.log(`Cancelled job ${job._id.toString()}`);
-}
 ```
 
-The method accepts an optional MongoDB session for transactional cancellation:
+The method returns the cancelled job, or `undefined` if no enqueued job has that `uniqueKey`. Running jobs are not cancelled.
+
+Pass a MongoDB session to include the cancellation in a transaction:
 
 ```ts
 await backgroundJobs.cancelEnqueuedByKey("process-user-123", { session });
 ```
-
-- Returns the cancelled job, or `undefined` when no job was cancelled
-- Running jobs are not cancelled or deleted — `undefined` is returned instead
-- Cancelling a job that failed and is waiting to be retried prevents the retry, but its earlier attempts have already run
-- Jobs are matched by their current `uniqueKey`: for jobs enqueued with distinct `enqueuedKey`/`runningKey` values, the key changes to `runningKey` once the job first starts
-- When cancelling inside a transaction, a worker locking the job concurrently can surface as a transient `WriteConflict` error, so use the usual transaction retry logic
 
 ## Observability
 

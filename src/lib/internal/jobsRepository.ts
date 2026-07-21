@@ -190,11 +190,8 @@ export class JobsRepository {
     await this.jobModel.deleteMany({ _id: { $in: ids } }, options);
   }
 
-  public async deleteEnqueuedJobByKey(key: string, options: SessionOptions = {}) {
-    const deletedJob = await this.jobModel.findOneAndDelete(
-      { uniqueKey: key, lockedAt: null },
-      options,
-    );
+  public async deleteEnqueuedJobByKey(uniqueKey: string, options: SessionOptions = {}) {
+    const deletedJob = await this.jobModel.findOneAndDelete({ uniqueKey, lockedAt: null }, options);
     return deletedJob ?? undefined;
   }
 

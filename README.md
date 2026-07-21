@@ -550,20 +550,33 @@ await backgroundJobs.enqueue(
 - Uniqueness is enforced via MongoDB unique index on the `uniqueKey` field
 - Cron jobs automatically use unique keys based on schedule name and timestamp
 
-### Cancelling an enqueued job by unique key
+### Cancelling a job by unique key
 
-Cancel one enqueued job by its `uniqueKey`:
+By default, only a job that has not been attempted is cancelled:
 
 ```ts
-const job = await backgroundJobs.cancelEnqueuedByKey("process-user-123");
+const job = await backgroundJobs.cancelByUniqueKey({
+  uniqueKey: "process-user-123",
+});
 ```
 
-The method returns the cancelled job, or `undefined` if no enqueued job has that `uniqueKey`. Running jobs are not cancelled.
+The method returns the cancelled job, or `undefined` if no unattempted job has that `uniqueKey`. Running jobs and jobs awaiting retry are left unchanged.
 
-Pass a MongoDB session to include the cancellation in a transaction:
+Set `cancelAttempted` to also cancel running jobs and jobs awaiting retry when they still have the specified `uniqueKey`:
 
 ```ts
-await backgroundJobs.cancelEnqueuedByKey("process-user-123", { session });
+await backgroundJobs.cancelByUniqueKey({
+  uniqueKey: "process-user-123",
+  cancelAttempted: true,
+});
+```
+
+Cancelling a running job does not interrupt its current execution, but prevents it from being retried if it fails. A job configured with a distinct `runningKey` must be cancelled using that key after it starts. A job without a `runningKey` cannot be cancelled by unique key after it starts.
+
+Pass a MongoDB session as the second argument to include the cancellation in a transaction:
+
+```ts
+await backgroundJobs.cancelByUniqueKey({ uniqueKey: "process-user-123" }, { session });
 ```
 
 ## Observability

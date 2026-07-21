@@ -681,7 +681,7 @@ describe("Helper APIs", () => {
     );
 
     await expect(
-      backgroundJobs.cancelEnqueuedByKey("example-job-to-cancel"),
+      backgroundJobs.cancelByUniqueKey({ uniqueKey: "example-job-to-cancel" }),
     ).resolves.toMatchObject({
       _id: job1._id,
       data: { myNumber: 123 },
@@ -694,7 +694,9 @@ describe("Helper APIs", () => {
   });
 
   it("returns undefined when no enqueued job exists with the key", async () => {
-    await expect(backgroundJobs.cancelEnqueuedByKey("missing-job")).resolves.toBeUndefined();
+    await expect(
+      backgroundJobs.cancelByUniqueKey({ uniqueKey: "missing-job" }),
+    ).resolves.toBeUndefined();
   });
 
   it("leaves a running job unchanged", async () => {
@@ -711,11 +713,134 @@ describe("Helper APIs", () => {
     );
 
     await expect(
-      backgroundJobs.cancelEnqueuedByKey("running-example-job"),
+      backgroundJobs.cancelByUniqueKey({ uniqueKey: "running-example-job" }),
     ).resolves.toBeUndefined();
     await expect(backgroundJobs.getJobById(job._id.toString())).resolves.toMatchObject({
       _id: job._id,
       lockedAt: expect.any(Date),
+    });
+  });
+
+  it("cancels a running job when cancelAttempted is true", async () => {
+    const job = ensureExistence(
+      await backgroundJobs.enqueue(
+        ExampleJob,
+        { myNumber: 123 },
+        { unique: "attempted-running-example-job" },
+      ),
+    );
+    await backgroundJobs.jobModel.updateOne(
+      { _id: job._id },
+      { lockedAt: new Date("2026-01-01T00:00:00.000Z") },
+    );
+
+    await expect(
+      backgroundJobs.cancelByUniqueKey({
+        uniqueKey: "attempted-running-example-job",
+        cancelAttempted: true,
+      }),
+    ).resolves.toMatchObject({ _id: job._id });
+    await expect(backgroundJobs.getJobById(job._id.toString())).resolves.toBeNull();
+  });
+
+  it("leaves a job awaiting retry unchanged", async () => {
+    const job = ensureExistence(
+      await backgroundJobs.enqueue(
+        ExampleJob,
+        { myNumber: 123 },
+        { unique: "retrying-example-job" },
+      ),
+    );
+    await backgroundJobs.jobModel.updateOne({ _id: job._id }, { attemptsCount: 1 });
+
+    await expect(
+      backgroundJobs.cancelByUniqueKey({ uniqueKey: "retrying-example-job" }),
+    ).resolves.toBeUndefined();
+    await expect(backgroundJobs.getJobById(job._id.toString())).resolves.toMatchObject({
+      _id: job._id,
+      attemptsCount: 1,
+    });
+  });
+
+  it("cancels a job awaiting retry when cancelAttempted is true", async () => {
+    const job = ensureExistence(
+      await backgroundJobs.enqueue(
+        ExampleJob,
+        { myNumber: 123 },
+        { unique: "attempted-retrying-example-job" },
+      ),
+    );
+    await backgroundJobs.jobModel.updateOne({ _id: job._id }, { attemptsCount: 1 });
+
+    await expect(
+      backgroundJobs.cancelByUniqueKey({
+        uniqueKey: "attempted-retrying-example-job",
+        cancelAttempted: true,
+      }),
+    ).resolves.toMatchObject({ _id: job._id });
+    await expect(backgroundJobs.getJobById(job._id.toString())).resolves.toBeNull();
+  });
+
+  it("cancels an attempted job by its running key", async () => {
+    const job = ensureExistence(
+      await backgroundJobs.enqueue(
+        ExampleJob,
+        { myNumber: 123 },
+        {
+          unique: {
+            enqueuedKey: "advanced-enqueued-key",
+            runningKey: "advanced-running-key",
+          },
+        },
+      ),
+    );
+    await backgroundJobs.jobModel.updateOne(
+      { _id: job._id },
+      {
+        lockedAt: new Date("2026-01-01T00:00:00.000Z"),
+        uniqueKey: "advanced-running-key",
+      },
+    );
+
+    await expect(
+      backgroundJobs.cancelByUniqueKey({
+        uniqueKey: "advanced-enqueued-key",
+        cancelAttempted: true,
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      backgroundJobs.cancelByUniqueKey({
+        uniqueKey: "advanced-running-key",
+        cancelAttempted: true,
+      }),
+    ).resolves.toMatchObject({ _id: job._id });
+  });
+
+  it("cannot cancel an attempted job when its unique key is removed", async () => {
+    const job = ensureExistence(
+      await backgroundJobs.enqueue(
+        ExampleJob,
+        { myNumber: 123 },
+        { unique: { enqueuedKey: "removed-running-key", runningKey: undefined } },
+      ),
+    );
+    await backgroundJobs.jobModel.updateOne(
+      { _id: job._id },
+      {
+        $set: { lockedAt: new Date("2026-01-01T00:00:00.000Z") },
+        $unset: { uniqueKey: "" },
+      },
+    );
+
+    await expect(
+      backgroundJobs.cancelByUniqueKey({
+        uniqueKey: "removed-running-key",
+        cancelAttempted: true,
+      }),
+    ).resolves.toBeUndefined();
+    await expect(backgroundJobs.getJobById(job._id.toString())).resolves.toMatchObject({
+      _id: job._id,
+      uniqueKey: undefined,
     });
   });
 
@@ -729,10 +854,10 @@ describe("Helper APIs", () => {
     );
 
     await expect(
-      backgroundJobs.cancelEnqueuedByKey("distinct-running-key"),
+      backgroundJobs.cancelByUniqueKey({ uniqueKey: "distinct-running-key" }),
     ).resolves.toBeUndefined();
     await expect(
-      backgroundJobs.cancelEnqueuedByKey("distinct-enqueued-key"),
+      backgroundJobs.cancelByUniqueKey({ uniqueKey: "distinct-enqueued-key" }),
     ).resolves.toMatchObject({ _id: job._id });
     await expect(backgroundJobs.getJobById(job._id.toString())).resolves.toBeNull();
   });
@@ -748,9 +873,10 @@ describe("Helper APIs", () => {
 
     const session = await createMongoSession();
     session.startTransaction();
-    const result = await backgroundJobs.cancelEnqueuedByKey("transactional-example-job", {
-      session,
-    });
+    const result = await backgroundJobs.cancelByUniqueKey(
+      { uniqueKey: "transactional-example-job" },
+      { session },
+    );
     await session.commitTransaction();
     await session.endSession();
 
@@ -769,9 +895,10 @@ describe("Helper APIs", () => {
 
     const session = await createMongoSession();
     session.startTransaction();
-    const result = await backgroundJobs.cancelEnqueuedByKey("aborted-transactional-example-job", {
-      session,
-    });
+    const result = await backgroundJobs.cancelByUniqueKey(
+      { uniqueKey: "aborted-transactional-example-job" },
+      { session },
+    );
     await session.abortTransaction();
     await session.endSession();
 

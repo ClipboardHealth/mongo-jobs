@@ -32,6 +32,11 @@ export interface ConstructorOptions {
   allowHandlerOverride?: boolean;
 }
 
+export interface CancelByUniqueKeyParameters {
+  uniqueKey: string;
+  cancelAttempted?: boolean;
+}
+
 export class BackgroundJobs {
   public readonly jobModel: mongoose.Model<BackgroundJobType<unknown>>;
   public readonly scheduleModel: mongoose.Model<ScheduleType<unknown>>;
@@ -170,7 +175,11 @@ export class BackgroundJobs {
     await this.jobsRepo.deleteJobs(jobObjectIds, options);
   }
 
-  public async cancelEnqueuedByKey(uniqueKey: string, options: SessionOptions = {}) {
-    return await this.jobsRepo.deleteEnqueuedJobByKey(uniqueKey, options);
+  public async cancelByUniqueKey(
+    parameters: CancelByUniqueKeyParameters,
+    options: SessionOptions = {},
+  ) {
+    const { uniqueKey, cancelAttempted = false } = parameters;
+    return await this.jobsRepo.deleteByUniqueKey({ uniqueKey, cancelAttempted }, options);
   }
 }

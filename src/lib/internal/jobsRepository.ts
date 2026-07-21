@@ -33,6 +33,11 @@ interface ConstructorOptions {
   jobModel: mongoose.Model<BackgroundJobType<unknown>>;
 }
 
+interface DeleteByUniqueKeyParameters {
+  uniqueKey: string;
+  cancelAttempted: boolean;
+}
+
 function normalizeUniqueOptions(
   options: EnqueueUniqueOptions | undefined,
 ): JobUniqueOptions | undefined {
@@ -190,8 +195,15 @@ export class JobsRepository {
     await this.jobModel.deleteMany({ _id: { $in: ids } }, options);
   }
 
-  public async deleteEnqueuedJobByKey(uniqueKey: string, options: SessionOptions = {}) {
-    const deletedJob = await this.jobModel.findOneAndDelete({ uniqueKey, lockedAt: null }, options);
+  public async deleteByUniqueKey(
+    parameters: DeleteByUniqueKeyParameters,
+    options: SessionOptions = {},
+  ) {
+    const { uniqueKey, cancelAttempted } = parameters;
+    const filter = cancelAttempted
+      ? { uniqueKey }
+      : { uniqueKey, lockedAt: null, attemptsCount: 0 };
+    const deletedJob = await this.jobModel.findOneAndDelete(filter, options);
     return deletedJob ?? undefined;
   }
 

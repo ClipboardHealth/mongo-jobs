@@ -21,6 +21,9 @@ await backgroundJobs.start(["notifications"], {
   // Interval to refresh queue list, in ms (default: 30000 = 30 seconds)
   refreshQueuesIntervalMS: 60_000,
 
+  // Cap + jitter the exponential retry backoff, in ms (default: 600000 = 10 minutes)
+  maxRetryBackoffMS: 600_000,
+
   // Exclude specific queues from processing
   exclude: ["low-priority-queue"],
 });

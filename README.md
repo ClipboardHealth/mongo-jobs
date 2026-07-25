@@ -369,6 +369,9 @@ await backgroundJobs.start(["notifications"], {
   // Interval to refresh queue list, in ms (default: 30000 = 30 seconds)
   refreshQueuesIntervalMS: 60_000,
 
+  // Cap + jitter the exponential retry backoff, in ms (default: 600000 = 10 minutes)
+  maxRetryBackoffMS: 600_000,
+
   // Exclude specific queues from processing
   exclude: ["low-priority-queue"],
 });
@@ -396,6 +399,7 @@ await backgroundJobs.stop(30_000); // Wait up to 30 seconds for jobs to complete
 - **`unlockJobsIntervalMS`**: How often to check for and unlock stuck jobs
 - **`refreshQueuesIntervalMS`**: How often to refresh the list of queues to consume
 - **`exclude`**: Array of queue names to skip processing
+- **`maxRetryBackoffMS`**: Upper bound for the exponential retry backoff, in ms (default: 600000 = 10 minutes). Retries use exponential backoff with equal jitter, capped at this value
 
 ### Cron jobs
 

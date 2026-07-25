@@ -10,6 +10,7 @@ import type { Logger } from "./logger";
 import type { Metrics } from "./metrics";
 import { isMongoDuplicateError } from "./mongoDuplicate";
 import type { Registry } from "./registry";
+import { computeRetryBackoffMS } from "./retryBackoff";
 import { FairQueueConsumer } from "./worker/fairQueueConsumer";
 import type { QueueConsumer } from "./worker/queueConsumer";
 
@@ -21,6 +22,7 @@ export interface WorkerOptions {
   unlockJobsIntervalMS?: number;
   refreshQueuesIntervalMS?: number;
   exclude?: string[];
+  maxRetryBackoffMS?: number;
 }
 
 interface ConstructorOptions extends WorkerOptions {
@@ -41,6 +43,7 @@ const DEFAULT_UNLOCK_JOBS_INTERVAL = 60 * MILLIS_IN_SECOND; // 1 minute
 const DEFAULT_REFRESH_QUEUES_INTERVAL = 30 * MILLIS_IN_SECOND; // 30 seconds
 const DUPLICATE_RESCHEDULE_TIME = 5 * MILLIS_IN_SECOND; // 5 seconds
 const DEFAULT_MAX_ATTEMPTS = 10;
+const DEFAULT_MAX_RETRY_BACKOFF = 10 * 60 * MILLIS_IN_SECOND; // 10 minutes
 const GRACEFUL_SHUTDOWN_WAIT = 30 * MILLIS_IN_SECOND; // 30 seconds
 
 function errorToString(error: unknown): string {
@@ -82,6 +85,7 @@ export class Worker {
   private readonly maxConcurrency: number;
   private readonly newJobCheckWaitMS: number;
   private readonly useChangeStream: boolean;
+  private readonly maxRetryBackoffMS: number;
 
   private readonly unlockJobsIntervalMS: number;
   private readonly refreshQueuesIntervalMS: number;
@@ -105,6 +109,7 @@ export class Worker {
     this.maxConcurrency = options.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY;
     this.newJobCheckWaitMS = options.newJobCheckWaitMS ?? DEFAULT_NEW_JOB_CHECK_WAIT;
     this.useChangeStream = options.useChangeStream ?? DEFAULT_USE_CHANGE_STREAM;
+    this.maxRetryBackoffMS = options.maxRetryBackoffMS ?? DEFAULT_MAX_RETRY_BACKOFF;
     this.unlockJobsIntervalMS = options.unlockJobsIntervalMS ?? DEFAULT_UNLOCK_JOBS_INTERVAL;
     this.refreshQueuesIntervalMS =
       options.refreshQueuesIntervalMS ?? DEFAULT_REFRESH_QUEUES_INTERVAL;
@@ -425,8 +430,7 @@ export class Worker {
     attemptsCount: number,
     error: string,
   ): Promise<void> {
-    const exponentialBackoffTime = 2 ** attemptsCount * MILLIS_IN_SECOND;
-    const nextRunAt = fromNow(exponentialBackoffTime);
+    const nextRunAt = fromNow(computeRetryBackoffMS(attemptsCount, this.maxRetryBackoffMS));
 
     if (job.queue) {
       this.metrics.increment(job.queue, "retry");

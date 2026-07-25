@@ -237,6 +237,10 @@ export class Worker {
     }
 
     while (this.runningJobs.size < this.maxConcurrency) {
+      if (this.stopped) {
+        break;
+      }
+
       this.fetchingJobs = true;
       /* I know that fetching jobs one by one here is terrible,
          but unfortunately Mongo doesn't support updateMany with limit.
@@ -251,7 +255,30 @@ export class Worker {
         break;
       }
 
+      if (this.stopped) {
+        // stop() was called while this job was being acquired. Release the lock
+        // so another worker can pick it up right away instead of waiting for it
+        // to expire, and do not start new work during shutdown.
+        // eslint-disable-next-line no-await-in-loop
+        await this.releaseJobLock(job);
+        break;
+      }
+
       void this.performJob(job);
+    }
+  }
+
+  private async releaseJobLock(job: BackgroundJobType<unknown>): Promise<void> {
+    try {
+      await this.jobsRepo.updateOne(job._id, {
+        $unset: {
+          lockedAt: "",
+        },
+      });
+    } catch (error) {
+      this.logger?.error(
+        `Failed to release job lock during shutdown ${job._id.toString()}: ${errorMessage(error)}`,
+      );
     }
   }
 

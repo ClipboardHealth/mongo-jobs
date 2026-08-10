@@ -30,6 +30,14 @@ class RandomQueueSet {
     }
   }
 
+  public has(queue: string): boolean {
+    return this.indexByQueue.has(queue);
+  }
+
+  public values(): readonly string[] {
+    return this.queues;
+  }
+
   public getRandom(): string | undefined {
     if (this.queues.length === 0) {
       return undefined;
@@ -40,7 +48,7 @@ class RandomQueueSet {
 }
 
 export class ActionableQueues {
-  private readonly actionable = new Set<string>();
+  private readonly actionable = new RandomQueueSet();
   private readonly idle = new RandomQueueSet();
   private readonly inFlightByQueue = new Map<string, number>();
 
@@ -88,6 +96,15 @@ export class ActionableQueues {
   }
 
   /**
+   * Returns a uniformly random actionable queue, or `undefined` when none are actionable. Ignores
+   * in-flight counts, so a queue holding long-running jobs competes for slots on equal terms with
+   * one holding short jobs.
+   */
+  public getRandom(): string | undefined {
+    return this.actionable.getRandom();
+  }
+
+  /**
    * Returns a random actionable queue with the fewest jobs in flight, or `undefined` when none are
    * actionable.
    *
@@ -103,7 +120,7 @@ export class ActionableQueues {
 
     let leastInFlight = Number.POSITIVE_INFINITY;
     const leastLoaded: string[] = [];
-    for (const queue of this.actionable) {
+    for (const queue of this.actionable.values()) {
       const inFlight = this.inFlight(queue);
       if (inFlight < leastInFlight) {
         leastInFlight = inFlight;

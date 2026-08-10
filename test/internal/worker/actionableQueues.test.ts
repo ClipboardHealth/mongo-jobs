@@ -36,6 +36,21 @@ describe(ActionableQueues, () => {
     expect(actionableQueues.getLeastInFlight()).toBeUndefined();
   });
 
+  it("ignores in-flight counts when selecting at random", () => {
+    actionableQueues.add("busy");
+    actionableQueues.add("idle");
+    actionableQueues.acquire("busy");
+    actionableQueues.acquire("busy");
+
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    expect(actionableQueues.getRandom()).toBe("busy");
+    expect(actionableQueues.getLeastInFlight()).toBe("idle");
+  });
+
+  it("returns undefined from random selection when no queue is actionable", () => {
+    expect(actionableQueues.getRandom()).toBeUndefined();
+  });
+
   it("will return proper queue in a complex add and remove scenario", () => {
     const queue1 = "queue1";
     const queue2 = "queue2";

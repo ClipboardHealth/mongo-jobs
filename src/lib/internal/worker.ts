@@ -11,7 +11,7 @@ import type { Metrics } from "./metrics";
 import { isMongoDuplicateError } from "./mongoDuplicate";
 import type { Registry } from "./registry";
 import { FairQueueConsumer } from "./worker/fairQueueConsumer";
-import type { QueueConsumer } from "./worker/queueConsumer";
+import type { QueueConsumer, QueueSelectionStrategy } from "./worker/queueConsumer";
 
 export interface WorkerOptions {
   maxConcurrency?: number;
@@ -21,6 +21,8 @@ export interface WorkerOptions {
   unlockJobsIntervalMS?: number;
   refreshQueuesIntervalMS?: number;
   exclude?: string[];
+  /** Defaults to `random`. See {@link QueueSelectionStrategy}. */
+  queueSelectionStrategy?: QueueSelectionStrategy;
 }
 
 interface ConstructorOptions extends WorkerOptions {
@@ -121,7 +123,12 @@ export class Worker {
       }
     }
 
-    this.queueConsumer = new FairQueueConsumer(queues, options.jobsRepo, this.logger);
+    this.queueConsumer = new FairQueueConsumer({
+      queues,
+      jobsRepository: options.jobsRepo,
+      logger: this.logger,
+      queueSelectionStrategy: options.queueSelectionStrategy,
+    });
   }
 
   public async start() {

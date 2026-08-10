@@ -39,12 +39,31 @@ describe(FairQueueConsumer, () => {
       return stream;
     });
     jobsRepository = { watchUpserts } as unknown as JobsRepository;
-    consumer = new FairQueueConsumer(QUEUES, jobsRepository, logger);
+    consumer = new FairQueueConsumer({ queues: QUEUES, jobsRepository, logger });
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
     vi.useRealTimers();
+  });
+
+  it("defaults to random selection, ignoring how many jobs a queue has in flight", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    jobsRepository.fetchAndLockNextJob = vi.fn(async ([queue]: string[]) =>
+      createJob(queue ?? "missing"),
+    );
+    jobsRepository.fetchQueuesWithJobs = vi.fn(async () => ["slow", "fast"]);
+    consumer = new FairQueueConsumer({ queues: ["slow", "fast"], jobsRepository, logger });
+    await consumer.refreshActionableQueuesFromDB();
+
+    const jobsInFourSlots = [
+      await consumer.acquireNextJob(),
+      await consumer.acquireNextJob(),
+      await consumer.acquireNextJob(),
+      await consumer.acquireNextJob(),
+    ];
+
+    expect(jobsInFourSlots.map((job) => job?.queue)).toEqual(["slow", "slow", "slow", "slow"]);
   });
 
   it("keeps assigning capacity to a fast queue while a slow queue remains in flight", async () => {
@@ -53,7 +72,12 @@ describe(FairQueueConsumer, () => {
       createJob(queue ?? "missing"),
     );
     jobsRepository.fetchQueuesWithJobs = vi.fn(async () => ["slow", "fast"]);
-    consumer = new FairQueueConsumer(["slow", "fast"], jobsRepository, logger);
+    consumer = new FairQueueConsumer({
+      queues: ["slow", "fast"],
+      jobsRepository,
+      logger,
+      queueSelectionStrategy: "leastInFlight",
+    });
     await consumer.refreshActionableQueuesFromDB();
 
     const jobsInFourSlots = [
@@ -78,7 +102,12 @@ describe(FairQueueConsumer, () => {
       createJob(queue ?? "missing"),
     );
     jobsRepository.fetchQueuesWithJobs = vi.fn(async () => queuesWithJobs);
-    consumer = new FairQueueConsumer(["slow", "newly-actionable"], jobsRepository, logger);
+    consumer = new FairQueueConsumer({
+      queues: ["slow", "newly-actionable"],
+      jobsRepository,
+      logger,
+      queueSelectionStrategy: "leastInFlight",
+    });
     await consumer.refreshActionableQueuesFromDB();
 
     const firstSlowJob = await consumer.acquireNextJob();

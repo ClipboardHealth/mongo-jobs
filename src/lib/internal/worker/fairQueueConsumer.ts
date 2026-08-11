@@ -22,6 +22,8 @@ export interface FairQueueConsumerOptions {
   jobsRepository: JobsRepository;
   logger?: Logger | undefined;
   queueSelectionStrategy?: QueueSelectionStrategy | undefined;
+  /** Source of randomness for queue selection, in `[0, 1)`. Defaults to `Math.random`. */
+  random?: (() => number) | undefined;
 }
 
 export class FairQueueConsumer extends EventTarget implements QueueConsumer {
@@ -30,7 +32,7 @@ export class FairQueueConsumer extends EventTarget implements QueueConsumer {
   private readonly consumedQueues: string[];
   private readonly consumedQueuesSet: Set<string>;
   private readonly queueSelectionStrategy: QueueSelectionStrategy;
-  private readonly actionableQueues = new ActionableQueues();
+  private readonly actionableQueues: ActionableQueues;
   private readonly futureQueues = new FutureQueues();
   private jobsChangeStream: ChangeStream<BackgroundJobType<unknown>> | undefined;
   private refreshQueuesInterval?: NodeJS.Timeout;
@@ -40,12 +42,13 @@ export class FairQueueConsumer extends EventTarget implements QueueConsumer {
 
   public constructor(options: FairQueueConsumerOptions) {
     super();
-    const { queues, jobsRepository, logger, queueSelectionStrategy } = options;
+    const { queues, jobsRepository, logger, queueSelectionStrategy, random } = options;
     this.consumedQueues = queues;
     this.consumedQueuesSet = new Set(queues);
     this.jobsRepository = jobsRepository;
     this.logger = logger;
     this.queueSelectionStrategy = queueSelectionStrategy ?? DEFAULT_QUEUE_SELECTION_STRATEGY;
+    this.actionableQueues = new ActionableQueues({ random });
   }
 
   public async start({ useChangeStream, refreshQueuesIntervalMS }: QueueConsumerStartOptions) {

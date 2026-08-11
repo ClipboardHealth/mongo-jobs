@@ -1,81 +1,66 @@
-class RandomQueueSet {
-  private readonly queues: string[] = [];
-  private readonly indexByQueue = new Map<string, number>();
+import { RandomQueueSet } from "./randomQueueSet";
 
-  public get size(): number {
-    return this.queues.length;
-  }
+export interface ActionableQueuesOptions {
+  /** Source of randomness in `[0, 1)`. Defaults to `Math.random`. */
+  random?: (() => number) | undefined;
+}
 
-  public add(queue: string): void {
-    if (this.indexByQueue.has(queue)) {
-      return;
-    }
+interface RebucketOptions {
+  queue: string;
+  from: number;
+  to: number;
+}
 
-    this.indexByQueue.set(queue, this.queues.length);
-    this.queues.push(queue);
-  }
-
-  public delete(queue: string): void {
-    const index = this.indexByQueue.get(queue);
-    if (index === undefined) {
-      return;
-    }
-
-    const lastQueue = this.queues.pop();
-    this.indexByQueue.delete(queue);
-
-    if (index < this.queues.length && lastQueue !== undefined) {
-      this.queues[index] = lastQueue;
-      this.indexByQueue.set(lastQueue, index);
-    }
-  }
-
-  public has(queue: string): boolean {
-    return this.indexByQueue.has(queue);
-  }
-
-  public values(): readonly string[] {
-    return this.queues;
-  }
-
-  public getRandom(): string | undefined {
-    if (this.queues.length === 0) {
-      return undefined;
-    }
-
-    return this.queues[Math.floor(Math.random() * this.queues.length)];
-  }
+interface BucketOptions {
+  queue: string;
+  inFlight: number;
 }
 
 export class ActionableQueues {
-  private readonly actionable = new RandomQueueSet();
-  private readonly idle = new RandomQueueSet();
+  private readonly random: () => number;
+  private readonly actionable: RandomQueueSet;
+
+  /**
+   * Actionable queues bucketed by how many of their jobs are in flight. Keys are bounded by the
+   * worker's concurrency, so both the number of buckets and the cost of finding the smallest key
+   * stay small.
+   */
+  private readonly queuesByInFlight = new Map<number, RandomQueueSet>();
+
+  /** Tracked for every queue, actionable or not, so counts survive a queue leaving the set. */
   private readonly inFlightByQueue = new Map<string, number>();
 
-  public add(queue: string) {
+  private leastInFlight = 0;
+
+  public constructor(options: ActionableQueuesOptions = {}) {
+    const { random } = options;
+    this.random = random ?? Math.random;
+    this.actionable = new RandomQueueSet({ random: this.random });
+  }
+
+  public add(queue: string): void {
     if (this.actionable.has(queue)) {
       return;
     }
 
     this.actionable.add(queue);
-    if (this.inFlight(queue) === 0) {
-      this.idle.add(queue);
-    }
+    this.addToBucket({ queue, inFlight: this.inFlight(queue) });
   }
 
-  public remove(queue: string) {
+  public remove(queue: string): void {
     if (!this.actionable.has(queue)) {
       return;
     }
 
     this.actionable.delete(queue);
-    this.idle.delete(queue);
+    this.removeFromBucket({ queue, inFlight: this.inFlight(queue) });
   }
 
   public acquire(queue: string): void {
-    const newInFlight = this.inFlight(queue) + 1;
+    const oldInFlight = this.inFlight(queue);
+    const newInFlight = oldInFlight + 1;
     this.inFlightByQueue.set(queue, newInFlight);
-    this.idle.delete(queue);
+    this.rebucket({ queue, from: oldInFlight, to: newInFlight });
   }
 
   public release(queue: string): void {
@@ -87,12 +72,11 @@ export class ActionableQueues {
     const newInFlight = oldInFlight - 1;
     if (newInFlight === 0) {
       this.inFlightByQueue.delete(queue);
-      if (this.actionable.has(queue)) {
-        this.idle.add(queue);
-      }
     } else {
       this.inFlightByQueue.set(queue, newInFlight);
     }
+
+    this.rebucket({ queue, from: oldInFlight, to: newInFlight });
   }
 
   /**
@@ -108,34 +92,61 @@ export class ActionableQueues {
    * Returns a random actionable queue with the fewest jobs in flight, or `undefined` when none are
    * actionable.
    *
-   * When any actionable queue is idle it wins outright, so the common case is O(1). Otherwise every
-   * actionable queue is in flight, which bounds their number by the worker's concurrency, so the
-   * linear scan over the remaining queues is cheap.
+   * A queue whose job just finished sits in the smallest non-empty bucket, so it is a candidate for
+   * every subsequent selection until it wins one.
    */
   public getLeastInFlight(): string | undefined {
-    const idleQueue = this.idle.getRandom();
-    if (idleQueue !== undefined) {
-      return idleQueue;
+    return this.queuesByInFlight.get(this.leastInFlight)?.getRandom();
+  }
+
+  private rebucket(options: RebucketOptions): void {
+    const { queue, from, to } = options;
+    if (!this.actionable.has(queue)) {
+      return;
     }
 
-    let leastInFlight = Number.POSITIVE_INFINITY;
-    const leastLoaded: string[] = [];
-    for (const queue of this.actionable.values()) {
-      const inFlight = this.inFlight(queue);
-      if (inFlight < leastInFlight) {
-        leastInFlight = inFlight;
-        leastLoaded.length = 0;
-        leastLoaded.push(queue);
-      } else if (inFlight === leastInFlight) {
-        leastLoaded.push(queue);
-      }
+    this.removeFromBucket({ queue, inFlight: from });
+    this.addToBucket({ queue, inFlight: to });
+  }
+
+  private addToBucket(options: BucketOptions): void {
+    const { queue, inFlight } = options;
+    let bucket = this.queuesByInFlight.get(inFlight);
+    if (bucket === undefined) {
+      bucket = new RandomQueueSet({ random: this.random });
+      this.queuesByInFlight.set(inFlight, bucket);
     }
 
-    if (leastLoaded.length === 0) {
-      return undefined;
+    bucket.add(queue);
+
+    // The sole bucket is the smallest one even when its key is above the previous minimum, which
+    // happens when a queue rejoins the set with jobs still in flight.
+    if (this.queuesByInFlight.size === 1 || inFlight < this.leastInFlight) {
+      this.leastInFlight = inFlight;
+    }
+  }
+
+  private removeFromBucket(options: BucketOptions): void {
+    const { queue, inFlight } = options;
+    const bucket = this.queuesByInFlight.get(inFlight);
+    if (bucket === undefined) {
+      return;
     }
 
-    return leastLoaded[Math.floor(Math.random() * leastLoaded.length)];
+    bucket.delete(queue);
+    if (bucket.size > 0) {
+      return;
+    }
+
+    this.queuesByInFlight.delete(inFlight);
+    if (inFlight === this.leastInFlight) {
+      this.recalculateLeastInFlight();
+    }
+  }
+
+  private recalculateLeastInFlight(): void {
+    const inFlightCounts = [...this.queuesByInFlight.keys()];
+    this.leastInFlight = inFlightCounts.length === 0 ? 0 : Math.min(...inFlightCounts);
   }
 
   private inFlight(queue: string): number {

@@ -1,144 +1,243 @@
 import { ActionableQueues } from "../../../src/lib/internal/worker/actionableQueues";
 
+interface StubRandom {
+  random: () => number;
+  setValue: (value: number) => void;
+}
+
+/** Replaces `Math.random` by injection, so no test reaches into a global. */
+function stubRandom(): StubRandom {
+  let value = 0;
+
+  return {
+    random: () => value,
+    setValue: (next: number) => {
+      value = next;
+    },
+  };
+}
+
+const SELECTORS = ["getRandom", "getLeastInFlight"] as const;
+
+/** Enough spread to reach every element of the sets these tests build. */
+const RANDOM_VALUES = [0, 0.25, 0.5, 0.75, 0.99];
+
 describe(ActionableQueues, () => {
+  let stub: StubRandom;
   let actionableQueues: ActionableQueues;
 
   beforeEach(() => {
-    actionableQueues = new ActionableQueues();
+    stub = stubRandom();
+    actionableQueues = new ActionableQueues({ random: stub.random });
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
+  /**
+   * The queues a selector can return, sorted. Asserting on the whole set keeps these tests
+   * independent of the order `RandomQueueSet` happens to hold its elements in.
+   */
+  function reachable(select: () => string | undefined): string[] {
+    const selected = new Set<string>();
+
+    RANDOM_VALUES.forEach((value) => {
+      stub.setValue(value);
+      const queue = select();
+      if (queue !== undefined) {
+        selected.add(queue);
+      }
+    });
+
+    return [...selected].sort();
+  }
+
+  function reachableLeastInFlight(): string[] {
+    return reachable(() => actionableQueues.getLeastInFlight());
+  }
+
+  describe.each(SELECTORS)("%s", (selector) => {
+    function select(): string | undefined {
+      return actionableQueues[selector]();
+    }
+
+    it("returns the only actionable queue", () => {
+      const queue = "myQueue";
+      actionableQueues.add(queue);
+
+      expect(reachable(select)).toStrictEqual([queue]);
+    });
+
+    it("returns undefined when no queue is actionable", () => {
+      expect(select()).toBeUndefined();
+    });
+
+    it("returns undefined when the only actionable queue is removed", () => {
+      const queue = "myQueue";
+      actionableQueues.add(queue);
+      actionableQueues.remove(queue);
+
+      expect(select()).toBeUndefined();
+    });
+
+    it("treats repeated additions as idempotent", () => {
+      const queue = "myQueue";
+      actionableQueues.add(queue);
+      actionableQueues.add(queue);
+      actionableQueues.add(queue);
+      actionableQueues.remove(queue);
+
+      expect(select()).toBeUndefined();
+    });
+
+    it("ignores removals of queues that are not actionable", () => {
+      actionableQueues.add("present");
+      actionableQueues.remove("absent");
+
+      expect(reachable(select)).toStrictEqual(["present"]);
+    });
+
+    it("can return either of two idle actionable queues", () => {
+      actionableQueues.add("first");
+      actionableQueues.add("second");
+
+      expect(reachable(select)).toStrictEqual(["first", "second"]);
+    });
+
+    it("will return proper queue in a complex add and remove scenario", () => {
+      const queue1 = "queue1";
+      const queue2 = "queue2";
+      const queue3 = "queue3";
+
+      actionableQueues.add(queue1);
+      actionableQueues.add(queue2);
+      actionableQueues.add(queue3);
+      actionableQueues.add(queue1);
+      actionableQueues.remove(queue3);
+      actionableQueues.remove(queue3);
+      actionableQueues.add(queue3);
+      actionableQueues.add(queue2);
+      actionableQueues.remove(queue2);
+      actionableQueues.remove(queue1);
+
+      expect(reachable(select)).toStrictEqual([queue3]);
+    });
   });
 
-  it("returns the only actionable queue", () => {
-    const queue = "myQueue";
-    actionableQueues.add(queue);
+  describe("getRandom", () => {
+    it("ignores in-flight counts, so a busy queue keeps winning its share", () => {
+      actionableQueues.add("busy");
+      actionableQueues.add("idle");
+      actionableQueues.acquire("busy");
+      actionableQueues.acquire("busy");
 
-    expect(actionableQueues.getLeastInFlight()).toBe(queue);
+      expect(reachable(() => actionableQueues.getRandom())).toStrictEqual(["busy", "idle"]);
+      expect(reachableLeastInFlight()).toStrictEqual(["idle"]);
+    });
   });
 
-  it("returns undefined when the only actionable queue is removed", () => {
-    const queue = "myQueue";
-    actionableQueues.add(queue);
-    actionableQueues.remove(queue);
+  describe("getLeastInFlight", () => {
+    it("prefers the actionable queue with fewer jobs in flight", () => {
+      actionableQueues.add("slow");
+      actionableQueues.add("fast");
 
-    expect(actionableQueues.getLeastInFlight()).toBeUndefined();
-  });
+      actionableQueues.acquire("slow");
 
-  it("treats repeated additions as idempotent", () => {
-    const queue = "myQueue";
-    actionableQueues.add(queue);
-    actionableQueues.add(queue);
-    actionableQueues.add(queue);
-    actionableQueues.remove(queue);
+      expect(reachableLeastInFlight()).toStrictEqual(["fast"]);
+    });
 
-    expect(actionableQueues.getLeastInFlight()).toBeUndefined();
-  });
+    it("selects among queues tied for least in flight", () => {
+      actionableQueues.add("slow");
+      actionableQueues.add("fast");
+      actionableQueues.acquire("slow");
+      actionableQueues.acquire("fast");
 
-  it("ignores in-flight counts when selecting at random", () => {
-    actionableQueues.add("busy");
-    actionableQueues.add("idle");
-    actionableQueues.acquire("busy");
-    actionableQueues.acquire("busy");
+      expect(reachableLeastInFlight()).toStrictEqual(["fast", "slow"]);
+    });
 
-    vi.spyOn(Math, "random").mockReturnValue(0);
-    expect(actionableQueues.getRandom()).toBe("busy");
-    expect(actionableQueues.getLeastInFlight()).toBe("idle");
-  });
+    it("returns a released queue to contention with a queue that never had jobs", () => {
+      actionableQueues.add("released");
+      actionableQueues.add("untouched");
+      actionableQueues.acquire("released");
 
-  it("returns undefined from random selection when no queue is actionable", () => {
-    expect(actionableQueues.getRandom()).toBeUndefined();
-  });
+      expect(reachableLeastInFlight()).toStrictEqual(["untouched"]);
 
-  it("will return proper queue in a complex add and remove scenario", () => {
-    const queue1 = "queue1";
-    const queue2 = "queue2";
-    const queue3 = "queue3";
+      actionableQueues.release("released");
 
-    // Queue1
-    actionableQueues.add(queue1);
-    // Queue1, queue2
-    actionableQueues.add(queue2);
-    // Queue1, queue2, queue3
+      expect(reachableLeastInFlight()).toStrictEqual(["released", "untouched"]);
+    });
 
-    actionableQueues.add(queue3);
-    // Queue1, queue2, queue3
-    actionableQueues.add(queue1);
-    // Queue1, queue2
-    actionableQueues.remove(queue3);
-    // Queue1, queue2
-    actionableQueues.remove(queue3);
-    // Queue1, queue2, queue3
-    actionableQueues.add(queue3);
-    // Queue1, queue2, queue3
-    actionableQueues.add(queue2);
-    // Queue1, queue3
-    actionableQueues.remove(queue2);
-    // Queue3
-    actionableQueues.remove(queue1);
+    it("makes a released queue least loaded when its peers are still busy", () => {
+      actionableQueues.add("slow");
+      actionableQueues.add("fast");
+      actionableQueues.acquire("slow");
+      actionableQueues.acquire("fast");
 
-    expect(actionableQueues.getLeastInFlight()).toBe(queue3);
-  });
+      actionableQueues.release("slow");
 
-  it("prefers the actionable queue with fewer jobs in flight", () => {
-    actionableQueues.add("slow");
-    actionableQueues.add("fast");
+      expect(reachableLeastInFlight()).toStrictEqual(["slow"]);
+    });
 
-    actionableQueues.acquire("slow");
+    it("remains work-conserving when only one queue is actionable", () => {
+      actionableQueues.add("slow");
 
-    expect(actionableQueues.getLeastInFlight()).toBe("fast");
-  });
+      actionableQueues.acquire("slow");
+      expect(reachableLeastInFlight()).toStrictEqual(["slow"]);
 
-  it("randomly selects among queues tied for least in flight", () => {
-    actionableQueues.add("slow");
-    actionableQueues.add("fast");
-    vi.spyOn(Math, "random").mockReturnValue(0.99);
+      actionableQueues.acquire("slow");
+      expect(reachableLeastInFlight()).toStrictEqual(["slow"]);
+    });
 
-    expect(actionableQueues.getLeastInFlight()).toBe("fast");
-  });
+    it("ignores releases for a queue with nothing in flight", () => {
+      actionableQueues.add("spuriously-released");
+      actionableQueues.add("other");
 
-  it("returns to random selection after the only in-flight job is released", () => {
-    actionableQueues.add("slow");
-    actionableQueues.add("fast");
-    actionableQueues.acquire("slow");
-    actionableQueues.release("slow");
-    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+      actionableQueues.release("spuriously-released");
+      actionableQueues.release("spuriously-released");
+      actionableQueues.acquire("spuriously-released");
 
-    actionableQueues.getLeastInFlight();
+      // Crediting a release below zero would rank it under "other" forever.
+      expect(reachableLeastInFlight()).toStrictEqual(["other"]);
+    });
 
-    expect(random).toHaveBeenCalledOnce();
-  });
+    it("continues tracking in-flight jobs while a queue is not actionable", () => {
+      actionableQueues.add("requeued");
+      actionableQueues.add("quiet");
+      actionableQueues.acquire("requeued");
+      actionableQueues.acquire("requeued");
 
-  it("remains work-conserving when only one queue is actionable", () => {
-    actionableQueues.add("slow");
+      actionableQueues.remove("requeued");
+      actionableQueues.release("requeued");
+      actionableQueues.add("requeued");
 
-    actionableQueues.acquire("slow");
-    expect(actionableQueues.getLeastInFlight()).toBe("slow");
+      // One job is still in flight, so "quiet" wins outright rather than tying.
+      expect(reachableLeastInFlight()).toStrictEqual(["quiet"]);
 
-    actionableQueues.acquire("slow");
-    expect(actionableQueues.getLeastInFlight()).toBe("slow");
-  });
+      actionableQueues.release("requeued");
 
-  it("makes a released queue least loaded", () => {
-    actionableQueues.add("slow");
-    actionableQueues.add("fast");
-    actionableQueues.acquire("slow");
-    actionableQueues.acquire("fast");
+      expect(reachableLeastInFlight()).toStrictEqual(["quiet", "requeued"]);
+    });
 
-    actionableQueues.release("slow");
+    it("still selects a queue that rejoins the set as the only one, with jobs in flight", () => {
+      actionableQueues.add("rejoining");
+      actionableQueues.acquire("rejoining");
+      actionableQueues.remove("rejoining");
 
-    expect(actionableQueues.getLeastInFlight()).toBe("slow");
-  });
+      actionableQueues.add("rejoining");
 
-  it("continues tracking in-flight jobs while a queue is not actionable", () => {
-    actionableQueues.add("queue");
-    actionableQueues.acquire("queue");
-    actionableQueues.remove("queue");
-    actionableQueues.release("queue");
+      expect(reachableLeastInFlight()).toStrictEqual(["rejoining"]);
+    });
 
-    actionableQueues.add("queue");
+    it("selects a queue that rejoins alongside a busier one, with jobs in flight", () => {
+      actionableQueues.add("rejoining");
+      actionableQueues.add("busier");
+      actionableQueues.acquire("rejoining");
+      actionableQueues.acquire("busier");
+      actionableQueues.acquire("busier");
+      actionableQueues.remove("rejoining");
+      actionableQueues.remove("busier");
 
-    expect(actionableQueues.getLeastInFlight()).toBe("queue");
+      actionableQueues.add("busier");
+      actionableQueues.add("rejoining");
+
+      expect(reachableLeastInFlight()).toStrictEqual(["rejoining"]);
+    });
   });
 });

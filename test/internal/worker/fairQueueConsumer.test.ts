@@ -13,6 +13,11 @@ const MAX_DELAY_MS = 30_000;
 const MAX_RETRIES = 10;
 const QUEUES = ["default"];
 
+/** Injected in place of `Math.random` to always select the first candidate queue. */
+function alwaysFirst(): number {
+  return 0;
+}
+
 /** Minimal ChangeStream stand-in: an EventEmitter with a stubbed `close()`. */
 class FakeChangeStream extends EventEmitter {
   public close = vi.fn(async () => {});
@@ -48,12 +53,16 @@ describe(FairQueueConsumer, () => {
   });
 
   it("defaults to random selection, ignoring how many jobs a queue has in flight", async () => {
-    vi.spyOn(Math, "random").mockReturnValue(0);
     jobsRepository.fetchAndLockNextJob = vi.fn(async ([queue]: string[]) =>
       createJob(queue ?? "missing"),
     );
     jobsRepository.fetchQueuesWithJobs = vi.fn(async () => ["slow", "fast"]);
-    consumer = new FairQueueConsumer({ queues: ["slow", "fast"], jobsRepository, logger });
+    consumer = new FairQueueConsumer({
+      queues: ["slow", "fast"],
+      jobsRepository,
+      logger,
+      random: alwaysFirst,
+    });
     await consumer.refreshActionableQueuesFromDB();
 
     const jobsInFourSlots = [
@@ -67,7 +76,6 @@ describe(FairQueueConsumer, () => {
   });
 
   it("keeps assigning capacity to a fast queue while a slow queue remains in flight", async () => {
-    vi.spyOn(Math, "random").mockReturnValue(0);
     jobsRepository.fetchAndLockNextJob = vi.fn(async ([queue]: string[]) =>
       createJob(queue ?? "missing"),
     );
@@ -77,6 +85,7 @@ describe(FairQueueConsumer, () => {
       jobsRepository,
       logger,
       queueSelectionStrategy: "leastInFlight",
+      random: alwaysFirst,
     });
     await consumer.refreshActionableQueuesFromDB();
 

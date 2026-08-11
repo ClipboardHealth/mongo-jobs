@@ -23,4 +23,7 @@ await backgroundJobs.start(["notifications"], {
 
   // Exclude specific queues from processing
   exclude: ["low-priority-queue"],
+
+  // How to pick the next queue to take a job from (default: "random")
+  queueSelectionStrategy: "leastInFlight",
 });

@@ -371,6 +371,9 @@ await backgroundJobs.start(["notifications"], {
 
   // Exclude specific queues from processing
   exclude: ["low-priority-queue"],
+
+  // How to pick the next queue to take a job from (default: "random")
+  queueSelectionStrategy: "leastInFlight",
 });
 ```
 
@@ -396,6 +399,16 @@ await backgroundJobs.stop(30_000); // Wait up to 30 seconds for jobs to complete
 - **`unlockJobsIntervalMS`**: How often to check for and unlock stuck jobs
 - **`refreshQueuesIntervalMS`**: How often to refresh the list of queues to consume
 - **`exclude`**: Array of queue names to skip processing
+- **`queueSelectionStrategy`**: How the worker picks which of its actionable queues to take the next job from. See [Queue selection strategies](#queue-selection-strategies)
+
+#### Queue selection strategies
+
+A worker consuming several queues has to choose one each time a concurrency slot frees up.
+
+- **`random`** (default) selects uniformly at random. Dequeue _attempts_ are spread evenly, but concurrency is not: a slot stays occupied for as long as the job that took it runs, so a queue of long-running jobs accumulates slots and can starve queues of shorter ones.
+- **`leastInFlight`** selects uniformly among the queues with the fewest jobs currently running on that worker. This bounds any one queue to its fair share of the worker's concurrency, so a backlog of slow jobs cannot crowd out a fast queue. In exchange, a queue mixing slow and fast jobs no longer earns extra concurrency for its slow ones.
+
+Both strategies are work-conserving: a worker with a free slot and any actionable queue always takes a job. Fairness under either is per queue, not per job — a queue with a million pending jobs gets the same share as a queue with one.
 
 ### Cron jobs
 

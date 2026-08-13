@@ -6,18 +6,33 @@ import type { JobsRepository, UpsertChangeStreamEvent } from "../jobsRepository"
 import type { Logger } from "../logger";
 import { ActionableQueues } from "./actionableQueues";
 import { FutureQueues } from "./futureQueues";
-import type { QueueConsumer, QueueConsumerStartOptions } from "./queueConsumer";
+import {
+  DEFAULT_QUEUE_SELECTION_STRATEGY,
+  type QueueConsumer,
+  type QueueConsumerStartOptions,
+  type QueueSelectionStrategy,
+} from "./queueConsumer";
 
 const CHANGE_STREAM_RETRY_BASE_DELAY_MS = 1000;
 const CHANGE_STREAM_RETRY_MAX_DELAY_MS = 30_000;
 const CHANGE_STREAM_MAX_RETRIES = 10;
+
+export interface FairQueueConsumerOptions {
+  queues: string[];
+  jobsRepository: JobsRepository;
+  logger?: Logger | undefined;
+  queueSelectionStrategy?: QueueSelectionStrategy | undefined;
+  /** Source of randomness for queue selection, in `[0, 1)`. Defaults to `Math.random`. */
+  random?: (() => number) | undefined;
+}
 
 export class FairQueueConsumer extends EventTarget implements QueueConsumer {
   private readonly jobsRepository: JobsRepository;
   private readonly logger: Logger | undefined;
   private readonly consumedQueues: string[];
   private readonly consumedQueuesSet: Set<string>;
-  private readonly actionableQueues = new ActionableQueues();
+  private readonly queueSelectionStrategy: QueueSelectionStrategy;
+  private readonly actionableQueues: ActionableQueues;
   private readonly futureQueues = new FutureQueues();
   private jobsChangeStream: ChangeStream<BackgroundJobType<unknown>> | undefined;
   private refreshQueuesInterval?: NodeJS.Timeout;
@@ -25,12 +40,15 @@ export class FairQueueConsumer extends EventTarget implements QueueConsumer {
   private changeStreamRetryCount = 0;
   private stopped = false;
 
-  public constructor(queues: string[], jobsRepository: JobsRepository, logger?: Logger) {
+  public constructor(options: FairQueueConsumerOptions) {
     super();
+    const { queues, jobsRepository, logger, queueSelectionStrategy, random } = options;
     this.consumedQueues = queues;
     this.consumedQueuesSet = new Set(queues);
     this.jobsRepository = jobsRepository;
     this.logger = logger;
+    this.queueSelectionStrategy = queueSelectionStrategy ?? DEFAULT_QUEUE_SELECTION_STRATEGY;
+    this.actionableQueues = new ActionableQueues({ random });
   }
 
   public async start({ useChangeStream, refreshQueuesIntervalMS }: QueueConsumerStartOptions) {
@@ -191,7 +209,7 @@ export class FairQueueConsumer extends EventTarget implements QueueConsumer {
     let job;
 
     while (!job) {
-      const queue = this.actionableQueues.getRandom();
+      const queue = this.selectQueue();
 
       if (queue === undefined) {
         return undefined;
@@ -203,10 +221,28 @@ export class FairQueueConsumer extends EventTarget implements QueueConsumer {
       if (!job) {
         // eslint-disable-next-line no-await-in-loop
         await this.removeQueueFromActionable(queue);
+      } else {
+        this.actionableQueues.acquire(queue);
       }
     }
 
     return job;
+  }
+
+  /**
+   * In-flight counts are maintained under every strategy, so they stay accurate for queues whose
+   * jobs are already running if the strategy ever changes.
+   */
+  private selectQueue(): string | undefined {
+    return this.queueSelectionStrategy === "leastInFlight"
+      ? this.actionableQueues.getLeastInFlight()
+      : this.actionableQueues.getRandom();
+  }
+
+  public release(job: BackgroundJobType<unknown>): void {
+    if (job.queue !== undefined) {
+      this.actionableQueues.release(job.queue);
+    }
   }
 
   public getConsumedQueues(): string[] {

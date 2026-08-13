@@ -1,15 +1,22 @@
 import { EventEmitter } from "node:events";
 
+import { ObjectId } from "mongodb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { JobsRepository } from "../../../src/lib/internal/jobsRepository";
 import { FairQueueConsumer } from "../../../src/lib/internal/worker/fairQueueConsumer";
+import type { BackgroundJobType } from "../../../src/lib/job";
 import { TestLogger } from "../../support/testLogger";
 
 const BASE_DELAY_MS = 1000;
 const MAX_DELAY_MS = 30_000;
 const MAX_RETRIES = 10;
 const QUEUES = ["default"];
+
+/** Injected in place of `Math.random` to always select the first candidate queue. */
+function alwaysFirst(): number {
+  return 0;
+}
 
 /** Minimal ChangeStream stand-in: an EventEmitter with a stubbed `close()`. */
 class FakeChangeStream extends EventEmitter {
@@ -37,11 +44,91 @@ describe(FairQueueConsumer, () => {
       return stream;
     });
     jobsRepository = { watchUpserts } as unknown as JobsRepository;
-    consumer = new FairQueueConsumer(QUEUES, jobsRepository, logger);
+    consumer = new FairQueueConsumer({ queues: QUEUES, jobsRepository, logger });
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.useRealTimers();
+  });
+
+  it("defaults to random selection, ignoring how many jobs a queue has in flight", async () => {
+    jobsRepository.fetchAndLockNextJob = vi.fn(async ([queue]: string[]) =>
+      createJob(queue ?? "missing"),
+    );
+    jobsRepository.fetchQueuesWithJobs = vi.fn(async () => ["slow", "fast"]);
+    consumer = new FairQueueConsumer({
+      queues: ["slow", "fast"],
+      jobsRepository,
+      logger,
+      random: alwaysFirst,
+    });
+    await consumer.refreshActionableQueuesFromDB();
+
+    const jobsInFourSlots = [
+      await consumer.acquireNextJob(),
+      await consumer.acquireNextJob(),
+      await consumer.acquireNextJob(),
+      await consumer.acquireNextJob(),
+    ];
+
+    expect(jobsInFourSlots.map((job) => job?.queue)).toEqual(["slow", "slow", "slow", "slow"]);
+  });
+
+  it("keeps assigning capacity to a fast queue while a slow queue remains in flight", async () => {
+    jobsRepository.fetchAndLockNextJob = vi.fn(async ([queue]: string[]) =>
+      createJob(queue ?? "missing"),
+    );
+    jobsRepository.fetchQueuesWithJobs = vi.fn(async () => ["slow", "fast"]);
+    consumer = new FairQueueConsumer({
+      queues: ["slow", "fast"],
+      jobsRepository,
+      logger,
+      queueSelectionStrategy: "leastInFlight",
+      random: alwaysFirst,
+    });
+    await consumer.refreshActionableQueuesFromDB();
+
+    const jobsInFourSlots = [
+      await consumer.acquireNextJob(),
+      await consumer.acquireNextJob(),
+      await consumer.acquireNextJob(),
+      await consumer.acquireNextJob(),
+    ];
+    expect(jobsInFourSlots.map((job) => job?.queue)).toEqual(["slow", "fast", "slow", "fast"]);
+
+    let completedFastJob = jobsInFourSlots[1]!;
+    for (let completion = 0; completion < 10; completion += 1) {
+      consumer.release(completedFastJob);
+      completedFastJob = (await consumer.acquireNextJob())!;
+      expect(completedFastJob.queue).toBe("fast");
+    }
+  });
+
+  it("selects a newly actionable queue while a backlogged queue remains in flight", async () => {
+    const queuesWithJobs = ["slow"];
+    jobsRepository.fetchAndLockNextJob = vi.fn(async ([queue]: string[]) =>
+      createJob(queue ?? "missing"),
+    );
+    jobsRepository.fetchQueuesWithJobs = vi.fn(async () => queuesWithJobs);
+    consumer = new FairQueueConsumer({
+      queues: ["slow", "newly-actionable"],
+      jobsRepository,
+      logger,
+      queueSelectionStrategy: "leastInFlight",
+    });
+    await consumer.refreshActionableQueuesFromDB();
+
+    const firstSlowJob = await consumer.acquireNextJob();
+    const secondSlowJob = await consumer.acquireNextJob();
+    expect([firstSlowJob?.queue, secondSlowJob?.queue]).toEqual(["slow", "slow"]);
+
+    queuesWithJobs.push("newly-actionable");
+    await consumer.refreshActionableQueuesFromDB();
+    consumer.release(firstSlowJob!);
+
+    const nextJob = await consumer.acquireNextJob();
+    expect(nextJob?.queue).toBe("newly-actionable");
   });
 
   it("does not throw and recreates the stream when the change stream emits an error", () => {
@@ -142,3 +229,23 @@ describe(FairQueueConsumer, () => {
     expect(newJobListener).not.toHaveBeenCalled();
   });
 });
+
+function createJob(queue: string): BackgroundJobType<unknown> {
+  return {
+    _id: new ObjectId("000000000000000000000001"),
+    createdAt: new Date("2020-01-01T00:00:00.000Z"),
+    updatedAt: new Date("2020-01-01T00:00:00.000Z"),
+    queue,
+    handlerName: "TestJob",
+    data: {},
+    nextRunAt: undefined,
+    lockedAt: undefined,
+    failedAt: undefined,
+    attemptsCount: 0,
+    lastError: undefined,
+    options: undefined,
+    uniqueKey: undefined,
+    scheduleName: undefined,
+    originalQueue: undefined,
+  };
+}

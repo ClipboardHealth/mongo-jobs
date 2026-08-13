@@ -17,6 +17,9 @@ import { Worker, type WorkerOptions } from "./internal/worker";
 import { BackgroundJobSchema, BackgroundJobSchemaName, type BackgroundJobType } from "./job";
 import { ScheduleSchema, ScheduleSchemaName, type ScheduleType } from "./schedule";
 
+export type { WorkerOptions };
+export type { QueueSelectionStrategy } from "./internal/worker/queueConsumer";
+
 /**
  * Helper type that forces explicit generic when using string handlers.
  * Produces an error tuple when T is unknown (no generic provided).

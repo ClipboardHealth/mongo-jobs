@@ -1,6 +1,6 @@
 {
   "name": "@clipboard-health/mongo-jobs",
-  "version": "2.7.11",
+  "version": "2.8.0",
   "description": "MongoDB-powered background jobs.",
   "keywords": [
     "mongodb",

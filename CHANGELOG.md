@@ -1,3 +1,10 @@
+# [2.8.0](https://github.com/ClipboardHealth/mongo-jobs/compare/v2.7.11...v2.8.0) (2026-08-13)
+
+
+### Features
+
+* Add an opt-in least-in-flight queue selection strategy ([#15](https://github.com/ClipboardHealth/mongo-jobs/issues/15)) ([1e4678c](https://github.com/ClipboardHealth/mongo-jobs/commit/1e4678c96ccea9dd1c8d3614d1b7606a45968b52))
+
 ## [2.7.11](https://github.com/ClipboardHealth/mongo-jobs/compare/v2.7.10...v2.7.11) (2026-07-09)
 
 

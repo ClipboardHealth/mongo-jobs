@@ -1,3 +1,10 @@
+## [2.8.1](https://github.com/ClipboardHealth/mongo-jobs/compare/v2.8.0...v2.8.1) (2026-09-09)
+
+
+### Bug Fixes
+
+* **deps:** bump js-yaml to 4.3.2 ([#16](https://github.com/ClipboardHealth/mongo-jobs/issues/16)) ([1897acf](https://github.com/ClipboardHealth/mongo-jobs/commit/1897acf6316d5e8111fd132f129d77af15fc4224))
+
 # [2.8.0](https://github.com/ClipboardHealth/mongo-jobs/compare/v2.7.11...v2.8.0) (2026-08-13)
 
 

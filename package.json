@@ -70,5 +70,8 @@
   },
   "engines": {
     "node": ">=24"
+  },
+  "overrides": {
+    "js-yaml": "4.3.2"
   }
 }

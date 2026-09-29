@@ -308,7 +308,7 @@ export class Worker {
           this.logger?.error(
             `Error while performing job ${job._id.toString()}: ${errorMessage(error)}`,
           );
-          void this.handleJobError(job, errorToString(error));
+          void this.handleJobError(job, error);
         }
       } finally {
         this.runningJobs.delete(job._id);
@@ -319,7 +319,7 @@ export class Worker {
     });
   }
 
-  private async handleJobError(job: BackgroundJobType<unknown>, error: string): Promise<void> {
+  private async handleJobError(job: BackgroundJobType<unknown>, error: unknown): Promise<void> {
     try {
       const attemptsCount = job.attemptsCount + 1;
       const maxAttempts = this.getMaxAttemptsForJob(job);
@@ -328,7 +328,7 @@ export class Worker {
       if (attemptsCount < maxAttempts) {
         await this.scheduleRetry(job, attemptsCount, error);
       } else {
-        await this.markJobFailed(job, attemptsCount, error);
+        await this.markJobFailed(job, attemptsCount, errorToString(error));
       }
     } catch {
       this.logger?.error(
@@ -431,10 +431,9 @@ export class Worker {
   private async scheduleRetry(
     job: BackgroundJobType<unknown>,
     attemptsCount: number,
-    error: string,
+    error: unknown,
   ): Promise<void> {
-    const exponentialBackoffTime = 2 ** attemptsCount * MILLIS_IN_SECOND;
-    const nextRunAt = fromNow(exponentialBackoffTime);
+    const nextRunAt = fromNow(this.getRetryDelayMS(job, attemptsCount, error));
 
     if (job.queue) {
       this.metrics.increment(job.queue, "retry");
@@ -442,7 +441,7 @@ export class Worker {
 
     await this.jobsRepo.updateOne(job._id, {
       $set: {
-        lastError: error,
+        lastError: errorToString(error),
         nextRunAt,
         attemptsCount,
       },
@@ -450,5 +449,31 @@ export class Worker {
         lockedAt: "",
       },
     });
+  }
+
+  private getRetryDelayMS(
+    job: BackgroundJobType<unknown>,
+    attemptsCount: number,
+    error: unknown,
+  ): number {
+    try {
+      const { handler } = this.registry.getRegisteredHandler(job.handlerName);
+      const delayMS = handler.getRetryDelayMS?.({ error, attemptsCount });
+
+      if (delayMS !== undefined) {
+        if (!Number.isFinite(delayMS) || delayMS < 0) {
+          throw new Error("Retry delay must be a finite, non-negative number of milliseconds");
+        }
+
+        return delayMS;
+      }
+    } catch (delayError) {
+      this.logger?.error("Error while calculating retry delay; using exponential backoff", {
+        ...this.logContext(job),
+        error: errorMessage(delayError),
+      });
+    }
+
+    return 2 ** attemptsCount * MILLIS_IN_SECOND;
   }
 }

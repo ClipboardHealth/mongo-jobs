@@ -150,7 +150,7 @@ export class MyJob implements HandlerInterface<MyJobData> {
 
 - **`name`** (required): Unique identifier for the job type
 - **`maxAttempts`** (optional): Maximum number of attempts, including the initial attempt, before marking the job as failed. Default is 10.
-- **`getRetryDelayMS({ error, attemptsCount })`** (optional): Synchronous function returning the delay before the next attempt in milliseconds. Receives the original thrown error and the number of failed attempts, starting at 1. Return `undefined` to use the default exponential backoff: 2^attemptsCount seconds (2, 4, 8, ...). Zero is allowed; negative or non-finite values and thrown errors are logged and fall back to the default. The worker reschedules the same job using its existing `nextRunAt`; the attempt limit still applies.
+- **`getRetryDelayMS({ error, attemptsCount })`** (optional): Synchronous function returning the delay before the next attempt in milliseconds. Receives the original thrown error and the number of failed attempts, starting at 1. Return `undefined` to use the default exponential backoff: 2^attemptsCount seconds (2, 4, 8, ...). Zero is allowed. The delay must be finite, non-negative, and produce a valid next run date; invalid values and thrown errors are logged and fall back to the default. The worker reschedules the same job using its existing `nextRunAt`; the attempt limit still applies.
 - **`perform`** (required): Async function that executes the job logic
   - `data`: The job payload passed when enqueueing
   - `job`: Optional metadata about the job execution (id, attempts, timestamps, etc.)

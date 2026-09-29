@@ -461,8 +461,8 @@ export class Worker {
       const delayMS = handler.getRetryDelayMS?.({ error, attemptsCount });
 
       if (delayMS !== undefined) {
-        if (!Number.isFinite(delayMS) || delayMS < 0) {
-          throw new Error("Retry delay must be a finite, non-negative number of milliseconds");
+        if (!Number.isFinite(delayMS) || delayMS < 0 || Number.isNaN(fromNow(delayMS).getTime())) {
+          throw new Error("Retry delay must be non-negative and produce a valid next run date");
         }
 
         return delayMS;
@@ -470,7 +470,10 @@ export class Worker {
     } catch (delayError) {
       this.logger?.error("Error while calculating retry delay; using exponential backoff", {
         ...this.logContext(job),
-        error: errorMessage(delayError),
+        error:
+          delayError instanceof Error
+            ? delayError.message
+            : "Retry delay hook threw a non-Error value",
       });
     }
 

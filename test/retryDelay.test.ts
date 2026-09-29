@@ -87,9 +87,32 @@ describe("Handler retry delay", () => {
     { name: "NaN", hook: () => Number.NaN, shouldLog: true },
     { name: "infinity", hook: () => Number.POSITIVE_INFINITY, shouldLog: true },
     {
+      name: "a delay beyond the supported date range",
+      hook: () => Number.MAX_VALUE,
+      shouldLog: true,
+    },
+    {
       name: "an exception",
       hook: () => {
         throw new Error("Cannot calculate retry delay");
+      },
+      shouldLog: true,
+    },
+    {
+      name: "a thrown bigint",
+      hook: () => {
+        // oxlint-disable-next-line no-throw-literal -- exercise arbitrary values thrown by a handler hook
+        throw 1n;
+      },
+      shouldLog: true,
+    },
+    {
+      name: "a thrown circular object",
+      hook: () => {
+        const circular: { self?: unknown } = {};
+        circular.self = circular;
+        // oxlint-disable-next-line no-throw-literal -- exercise arbitrary values thrown by a handler hook
+        throw circular;
       },
       shouldLog: true,
     },

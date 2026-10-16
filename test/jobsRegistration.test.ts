@@ -1,4 +1,3 @@
-/* eslint-disable  @typescript-eslint/dot-notation */
 import { BackgroundJobs } from "../src/lib/backgroundJobs";
 import type { Registry } from "../src/lib/internal/registry";
 import { ExampleJob } from "./support/exampleJob";
@@ -104,4 +103,3 @@ describe("Registering background jobs", () => {
     expect(group2).toBe("other-queue");
   });
 });
-/* eslint-enable  @typescript-eslint/dot-notation */

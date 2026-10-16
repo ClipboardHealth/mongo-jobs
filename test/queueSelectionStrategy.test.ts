@@ -36,7 +36,6 @@ describe("leastInFlight queue selection", () => {
   async function enqueueBlockedSlowJobs(count: number): Promise<void> {
     for (let index = 0; index < count; index += 1) {
       // Enqueued in series so the jobs are ordered predictably within the queue.
-      // eslint-disable-next-line no-await-in-loop
       await backgroundJobs.enqueue(SemaphoreJob, {
         resolvePromise: `slow-started-${index}`,
         waitPromise: BLOCKED,
@@ -47,7 +46,6 @@ describe("leastInFlight queue selection", () => {
   async function enqueueFastJobs(count: number): Promise<void> {
     for (let index = 0; index < count; index += 1) {
       // Enqueued in series so the jobs are ordered predictably within the queue.
-      // eslint-disable-next-line no-await-in-loop
       await backgroundJobs.enqueue(ExampleJob, { myNumber: index });
     }
   }

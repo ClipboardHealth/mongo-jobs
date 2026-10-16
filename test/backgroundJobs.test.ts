@@ -1,4 +1,3 @@
-/* eslint-disable  @typescript-eslint/dot-notation */
 import { BackgroundJobs } from "../src/lib/backgroundJobs";
 import { ExampleJob } from "./support/exampleJob";
 
@@ -38,4 +37,3 @@ describe("Registering background jobs", () => {
     expect(worker["unlockJobsIntervalMS"]).toBe(60_000);
   });
 });
-/* eslint-enable  @typescript-eslint/dot-notation */

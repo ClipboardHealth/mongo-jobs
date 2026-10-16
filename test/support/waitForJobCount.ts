@@ -23,7 +23,6 @@ export async function waitForJobCount(options: WaitForJobCountOptions): Promise<
   const timeoutAt = Date.now() + timeoutMilliseconds;
 
   for (;;) {
-    // eslint-disable-next-line no-await-in-loop
     const jobCount = await backgroundJobs.jobModel.countDocuments(query);
 
     if (jobCount === expectedCount) {
@@ -36,7 +35,6 @@ export async function waitForJobCount(options: WaitForJobCountOptions): Promise<
       );
     }
 
-    // eslint-disable-next-line no-await-in-loop
     await setTimeout(10);
   }
 }

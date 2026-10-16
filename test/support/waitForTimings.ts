@@ -24,7 +24,6 @@ export async function waitForTimings(
       );
     }
 
-    // eslint-disable-next-line no-await-in-loop
     await setTimeout(10);
   }
 }

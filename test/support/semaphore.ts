@@ -2,7 +2,6 @@ import { isDefined } from "@clipboard-health/util-ts";
 
 interface PromiseEntry {
   promise?: Promise<void>;
-  // oxlint-disable-next-line typescript/no-invalid-void-type
   resolve?: (value: void) => void;
 }
 

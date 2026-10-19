@@ -79,7 +79,6 @@ export class JobsRepository {
             .session(session);
 
           if (existingJob) {
-            // eslint-disable-next-line unicorn/no-useless-undefined -- consistent-return requires explicit undefined
             return undefined;
           }
         }
@@ -103,7 +102,6 @@ export class JobsRepository {
         return createdJob as unknown as BackgroundJobType<T>;
       } catch (error) {
         if (isMongoDuplicateError(error)) {
-          // eslint-disable-next-line unicorn/no-useless-undefined -- consistent-return requires explicit undefined
           return undefined;
         }
 

@@ -95,7 +95,6 @@ async function main() {
   log("MongoDB closed. Process should exit now.");
 }
 
-// eslint-disable-next-line unicorn/prefer-top-level-await
 void main().catch((error: unknown) => {
   log(`Error: ${error instanceof Error ? error.message : String(error)}`);
 });

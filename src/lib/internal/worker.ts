@@ -249,7 +249,6 @@ export class Worker {
          but unfortunately Mongo doesn't support updateMany with limit.
          So from all bad solutions this seemed the least terrible. */
 
-      // eslint-disable-next-line no-await-in-loop
       const job = await this.acquireNextJob();
       this.fetchingJobs = false;
 
@@ -324,7 +323,6 @@ export class Worker {
       const attemptsCount = job.attemptsCount + 1;
       const maxAttempts = this.getMaxAttemptsForJob(job);
 
-      // eslint-disable-next-line unicorn/prefer-ternary
       if (attemptsCount < maxAttempts) {
         await this.scheduleRetry(job, attemptsCount, error);
       } else {
@@ -354,7 +352,6 @@ export class Worker {
     const lockedAtThreshold = fromNow(-this.lockTimeoutMS);
 
     for (;;) {
-      // eslint-disable-next-line no-await-in-loop
       const job = await this.jobsRepo.unlockFirstExpiredJob(lockedAtThreshold);
 
       if (!job) {

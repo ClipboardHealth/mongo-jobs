@@ -1,4 +1,3 @@
-/* eslint-disable no-await-in-loop */
 import type { BackgroundJobs } from "./backgroundJobs";
 import type { AnyHandlerClass } from "./internal/registry";
 import type { Worker } from "./internal/worker";
@@ -61,4 +60,3 @@ export async function drainHandlers(
 
   await executeJobs(backgroundJobs, worker, queues, options);
 }
-/* eslint-enable no-await-in-loop */

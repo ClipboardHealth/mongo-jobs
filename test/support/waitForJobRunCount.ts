@@ -12,7 +12,6 @@ export async function waitForJobRunCount(options: WaitForJobRunCountOptions): Pr
   const timeoutAt = Date.now() + timeoutMilliseconds;
 
   for (;;) {
-    // eslint-disable-next-line no-await-in-loop
     const jobRunCount = await JobRun.countDocuments();
 
     if (jobRunCount === expectedCount) {
@@ -23,7 +22,6 @@ export async function waitForJobRunCount(options: WaitForJobRunCountOptions): Pr
       throw new Error(`Timed out waiting for ${expectedCount} job runs, found ${jobRunCount}`);
     }
 
-    // eslint-disable-next-line no-await-in-loop
     await setTimeout(10);
   }
 }

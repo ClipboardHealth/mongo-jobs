@@ -215,11 +215,9 @@ export class FairQueueConsumer extends EventTarget implements QueueConsumer {
         return undefined;
       }
 
-      // eslint-disable-next-line no-await-in-loop
       job = await this.jobsRepository.fetchAndLockNextJob([queue]);
 
       if (!job) {
-        // eslint-disable-next-line no-await-in-loop
         await this.removeQueueFromActionable(queue);
       } else {
         this.actionableQueues.acquire(queue);

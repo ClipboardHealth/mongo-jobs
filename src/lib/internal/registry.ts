@@ -2,7 +2,6 @@ import type { HandlerInterface } from "../handler";
 import { HandlerAlreadyRegisteredError } from "./handlerAlreadyRegisteredError";
 
 type InstantiableHandlerClass<T> = new () => HandlerInterface<T>;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type AnyHandlerClass<T> = new (...arguments_: any) => HandlerInterface<T>;
 export type InstantiableHandlerClassOrInstance<T> =
   | InstantiableHandlerClass<T>
@@ -26,7 +25,6 @@ function getHandlerClass<T>(handler: AnyHandlerClassOrInstance<T>): AnyHandlerCl
 function getHandlerInstance<T>(
   handler: InstantiableHandlerClassOrInstance<T>,
 ): HandlerInterface<T> {
-  // eslint-disable-next-line new-cap
   return isHandlerInstance(handler) ? handler : new handler();
 }
 

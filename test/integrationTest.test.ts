@@ -594,7 +594,6 @@ describe("Unique jobs", () => {
     expect(runningJob).toBeDefined();
     expect(waitingJob).toBeDefined();
 
-    // eslint-disable-next-line jest/no-conditional-in-test
     const timeDiff = waitingJob?.nextRunAt
       ? waitingJob.nextRunAt.getTime() - now.getTime()
       : undefined;

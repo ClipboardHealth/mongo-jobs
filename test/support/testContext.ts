@@ -41,7 +41,6 @@ export async function createTestContext(
         }
       } catch (error) {
         // Log, but don't throw to ensure cleanup continues
-        // eslint-disable-next-line no-console
         console.error("Error during test teardown:", error);
       }
     },

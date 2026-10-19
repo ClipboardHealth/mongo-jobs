@@ -21,7 +21,6 @@ export class TestMetricsReporter {
     const queue = tags["queue"] ?? "no_queue";
     const key = `${queue},${name}`;
 
-    // eslint-disable-next-line no-multi-assign
     const timingsArray = (this.timings[key] ||= []);
 
     const reportedValue = value instanceof Date ? Date.now() - value.getTime() : value;

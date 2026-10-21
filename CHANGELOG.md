@@ -1,3 +1,10 @@
+## [2.8.2](https://github.com/ClipboardHealth/mongo-jobs/compare/v2.8.1...v2.8.2) (2026-10-21)
+
+
+### Bug Fixes
+
+* upgrade Node.js to 24.22.1 (eMudhra CA compromise) ([#21](https://github.com/ClipboardHealth/mongo-jobs/issues/21)) ([36d594e](https://github.com/ClipboardHealth/mongo-jobs/commit/36d594eb86eeb4b1db0883628c6ce1adba5f9d77))
+
 ## [2.8.1](https://github.com/ClipboardHealth/mongo-jobs/compare/v2.8.0...v2.8.1) (2026-09-09)
 
 

@@ -1,3 +1,10 @@
+## [2.8.3](https://github.com/ClipboardHealth/mongo-jobs/compare/v2.8.2...v2.8.3) (2026-11-12)
+
+
+### Bug Fixes
+
+* upgrade Node.js to 24.22.3 (November 2026 security releases) ([#22](https://github.com/ClipboardHealth/mongo-jobs/issues/22)) ([0a7ec5b](https://github.com/ClipboardHealth/mongo-jobs/commit/0a7ec5b1bafbebe7e7468d2de8514c7012d9c2f5))
+
 ## [2.8.2](https://github.com/ClipboardHealth/mongo-jobs/compare/v2.8.1...v2.8.2) (2026-10-21)
 
 

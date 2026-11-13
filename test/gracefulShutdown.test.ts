@@ -48,11 +48,13 @@ describe("Graceful shutdown", () => {
     const worker = backgroundJobs.buildWorker(["default"], { useChangeStream: false });
     const acquisitionStarted = deferred();
     const allowAcquisition = deferred();
-    const acquireNextJob = worker.acquireNextJob.bind(worker);
-    worker.acquireNextJob = async () => {
+    // Gate the Mongo lock itself so stop() lands while the job is being locked.
+    const { jobsRepo } = backgroundJobs;
+    const fetchAndLockNextJob = jobsRepo.fetchAndLockNextJob.bind(jobsRepo);
+    jobsRepo.fetchAndLockNextJob = async (queues) => {
       acquisitionStarted.resolve();
       await allowAcquisition.promise;
-      return await acquireNextJob();
+      return await fetchAndLockNextJob(queues);
     };
 
     await worker.start();

@@ -97,7 +97,6 @@ export class Worker {
 
   private unlockJobsInterval?: NodeJS.Timeout;
   private workerLoopInterval?: NodeJS.Timeout;
-  private fetchingJobs = false;
   private inFlightAcquisition: Promise<boolean> | undefined;
   private newJobsWatched = false;
   private nextAvailableJobCheck = new Date();
@@ -203,7 +202,10 @@ export class Worker {
     clearTimeout(gracefulShutdownTimer);
 
     if (this.runningJobs.size > 0 || this.inFlightAcquisition) {
-      const runningJobsIds = [...this.runningJobs.keys()].join(", ");
+      const runningJobsIds = [
+        ...[...this.runningJobs.keys()].map(String),
+        ...(this.inFlightAcquisition ? ["<job acquisition in flight>"] : []),
+      ].join(", ");
       this.logger?.error(`Following jobs didn't end on time during shutdown: ${runningJobsIds}`);
       this.logger?.error(
         "Background Jobs: Stopped with pending jobs (Node.js process will not exit gracefully)",
@@ -247,7 +249,7 @@ export class Worker {
   private async workerLoop() {
     if (
       this.stopped ||
-      this.fetchingJobs ||
+      this.inFlightAcquisition ||
       this.runningJobs.size >= this.maxConcurrency ||
       new Date() < this.nextAvailableJobCheck
     ) {
@@ -255,7 +257,6 @@ export class Worker {
     }
 
     while (!this.stopped && this.runningJobs.size < this.maxConcurrency) {
-      this.fetchingJobs = true;
       /* I know that fetching jobs one by one here is terrible,
          but unfortunately Mongo doesn't support updateMany with limit.
          So from all bad solutions this seemed the least terrible. */
@@ -267,7 +268,6 @@ export class Worker {
         started = await acquisition;
       } finally {
         this.inFlightAcquisition = undefined;
-        this.fetchingJobs = false;
       }
 
       if (!started) {

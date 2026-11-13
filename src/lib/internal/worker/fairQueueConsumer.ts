@@ -209,6 +209,10 @@ export class FairQueueConsumer extends EventTarget implements QueueConsumer {
     let job;
 
     while (!job) {
+      if (this.stopped) {
+        return undefined;
+      }
+
       const queue = this.selectQueue();
 
       if (queue === undefined) {

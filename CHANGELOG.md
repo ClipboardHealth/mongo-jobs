@@ -1,3 +1,10 @@
+## [2.8.4](https://github.com/ClipboardHealth/mongo-jobs/compare/v2.8.3...v2.8.4) (2026-11-16)
+
+
+### Bug Fixes
+
+* stop taking jobs once stop() begins and wait for every started job (ALCH-8549) ([#24](https://github.com/ClipboardHealth/mongo-jobs/issues/24)) ([5f23102](https://github.com/ClipboardHealth/mongo-jobs/commit/5f23102ba0d2a0acee1eccac36ffd1fdedaa2a59)), closes [#13](https://github.com/ClipboardHealth/mongo-jobs/issues/13) [#13](https://github.com/ClipboardHealth/mongo-jobs/issues/13)
+
 ## [2.8.3](https://github.com/ClipboardHealth/mongo-jobs/compare/v2.8.2...v2.8.3) (2026-11-12)
 
 

@@ -75,6 +75,26 @@ describe(FairQueueConsumer, () => {
     expect(jobsInFourSlots.map((job) => job?.queue)).toEqual(["slow", "slow", "slow", "slow"]);
   });
 
+  it("stops scanning queues once stopped mid-acquisition", async () => {
+    jobsRepository.fetchQueuesWithJobs = vi.fn(async () => ["empty1", "empty2", "empty3"]);
+    jobsRepository.fetchNextJob = vi.fn(async () => undefined);
+    consumer = new FairQueueConsumer({
+      queues: ["empty1", "empty2", "empty3"],
+      jobsRepository,
+      logger,
+      random: alwaysFirst,
+    });
+    await consumer.refreshActionableQueuesFromDB();
+    const fetchAndLockNextJob = vi.fn(async () => {
+      await consumer.stop();
+      return undefined;
+    });
+    jobsRepository.fetchAndLockNextJob = fetchAndLockNextJob;
+
+    await expect(consumer.acquireNextJob()).resolves.toBeUndefined();
+    expect(fetchAndLockNextJob).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps assigning capacity to a fast queue while a slow queue remains in flight", async () => {
     jobsRepository.fetchAndLockNextJob = vi.fn(async ([queue]: string[]) =>
       createJob(queue ?? "missing"),

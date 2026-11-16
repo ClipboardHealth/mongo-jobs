@@ -97,7 +97,7 @@ export class Worker {
 
   private unlockJobsInterval?: NodeJS.Timeout;
   private workerLoopInterval?: NodeJS.Timeout;
-  private fetchingJobs = false;
+  private inFlightAcquisition: Promise<boolean> | undefined;
   private newJobsWatched = false;
   private nextAvailableJobCheck = new Date();
 
@@ -186,13 +186,26 @@ export class Worker {
     const { promise: shutdownWaitPromise, timeout: gracefulShutdownTimer } = delay(
       waitTime ?? GRACEFUL_SHUTDOWN_WAIT,
     );
-    const jobsWaitPromise = Promise.all(this.runningJobs.values());
+    let timedOut = false;
+    const deadline = shutdownWaitPromise.then(() => {
+      timedOut = true;
+    });
 
-    await Promise.race([shutdownWaitPromise, jobsWaitPromise]);
+    // Re-check after each wait: an acquisition in flight when stop() began can still finish after it.
+    while (!timedOut && (this.runningJobs.size > 0 || this.inFlightAcquisition)) {
+      await Promise.race([
+        deadline,
+        Promise.all([...this.runningJobs.values(), this.inFlightAcquisition]),
+      ]);
+    }
+
     clearTimeout(gracefulShutdownTimer);
 
-    if (this.runningJobs.size > 0) {
-      const runningJobsIds = [...this.runningJobs.keys()].join(", ");
+    if (this.runningJobs.size > 0 || this.inFlightAcquisition) {
+      const runningJobsIds = [
+        ...[...this.runningJobs.keys()].map(String),
+        ...(this.inFlightAcquisition ? ["<job acquisition in flight>"] : []),
+      ].join(", ");
       this.logger?.error(`Following jobs didn't end on time during shutdown: ${runningJobsIds}`);
       this.logger?.error(
         "Background Jobs: Stopped with pending jobs (Node.js process will not exit gracefully)",
@@ -236,28 +249,62 @@ export class Worker {
   private async workerLoop() {
     if (
       this.stopped ||
-      this.fetchingJobs ||
+      this.inFlightAcquisition ||
       this.runningJobs.size >= this.maxConcurrency ||
       new Date() < this.nextAvailableJobCheck
     ) {
       return;
     }
 
-    while (this.runningJobs.size < this.maxConcurrency) {
-      this.fetchingJobs = true;
+    while (!this.stopped && this.runningJobs.size < this.maxConcurrency) {
       /* I know that fetching jobs one by one here is terrible,
          but unfortunately Mongo doesn't support updateMany with limit.
          So from all bad solutions this seemed the least terrible. */
 
-      const job = await this.acquireNextJob();
-      this.fetchingJobs = false;
-
-      if (!job) {
-        this.scheduleWorkerLoopAfterWait();
-        break;
+      const acquisition = this.acquireAndStartJob();
+      this.inFlightAcquisition = acquisition;
+      let started: boolean;
+      try {
+        started = await acquisition;
+      } finally {
+        this.inFlightAcquisition = undefined;
       }
 
-      void this.performJob(job);
+      if (!started) {
+        if (!this.stopped) {
+          this.scheduleWorkerLoopAfterWait();
+        }
+        break;
+      }
+    }
+  }
+
+  private async acquireAndStartJob(): Promise<boolean> {
+    const job = await this.acquireNextJob();
+    if (!job) {
+      return false;
+    }
+
+    // stop() may have begun while the job was being locked; hand it back instead of running it.
+    if (this.stopped) {
+      this.queueConsumer.release(job);
+      await this.releaseJobLock(job);
+      return false;
+    }
+
+    void this.performJob(job);
+    return true;
+  }
+
+  private async releaseJobLock(job: BackgroundJobType<unknown>): Promise<void> {
+    try {
+      await this.jobsRepo.releaseLock(job);
+    } catch (error) {
+      this.logger?.error(
+        `Error while releasing job lock during shutdown. Job id: ${job._id.toString()}, error: ${errorMessage(
+          error,
+        )}`,
+      );
     }
   }
 
@@ -302,12 +349,13 @@ export class Worker {
         await this.markJobCompleted(job);
       } catch (error) {
         if (error instanceof DuplicateRunningError) {
-          void this.duplicateReschedule(job);
+          await this.duplicateReschedule(job);
         } else {
           this.logger?.error(
             `Error while performing job ${job._id.toString()}: ${errorMessage(error)}`,
           );
-          void this.handleJobError(job, errorToString(error));
+          // Awaited, like duplicateReschedule, so stop() waits for this write before Mongo closes.
+          await this.handleJobError(job, errorToString(error));
         }
       } finally {
         this.runningJobs.delete(job._id);
@@ -328,24 +376,32 @@ export class Worker {
       } else {
         await this.markJobFailed(job, attemptsCount, error);
       }
-    } catch {
+    } catch (writeError) {
       this.logger?.error(
         `Error while marking job as failed. Job id: ${job._id.toString()}, error: ${errorMessage(
-          error,
+          writeError,
         )}`,
       );
     }
   }
 
   private async duplicateReschedule(job: BackgroundJobType<unknown>) {
-    await this.jobsRepo.updateOne(job._id, {
-      $set: {
-        nextRunAt: fromNow(DUPLICATE_RESCHEDULE_TIME),
-      },
-      $unset: {
-        lockedAt: "",
-      },
-    });
+    try {
+      await this.jobsRepo.updateOne(job._id, {
+        $set: {
+          nextRunAt: fromNow(DUPLICATE_RESCHEDULE_TIME),
+        },
+        $unset: {
+          lockedAt: "",
+        },
+      });
+    } catch (error) {
+      this.logger?.error(
+        `Error while rescheduling duplicate job. Job id: ${job._id.toString()}, error: ${errorMessage(
+          error,
+        )}`,
+      );
+    }
   }
 
   private async unlockStuckJobs() {

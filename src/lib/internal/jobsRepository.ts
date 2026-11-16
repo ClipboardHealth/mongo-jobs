@@ -161,6 +161,14 @@ export class JobsRepository {
     await this.jobModel.updateOne({ _id: id }, update);
   }
 
+  public async releaseLock(job: BackgroundJobType<unknown>) {
+    // Matching lockedAt avoids unlocking a lock that expired and another worker re-acquired.
+    await this.jobModel.updateOne(
+      { _id: job._id, lockedAt: job.lockedAt },
+      { $unset: { lockedAt: "" } },
+    );
+  }
+
   public async unlockFirstExpiredJob(lockedAtThreshold: Date) {
     const expiredJob = await this.jobModel.findOneAndUpdate(
       {

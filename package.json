@@ -61,7 +61,7 @@
     "oxlint": "1.93.0",
     "semantic-release": "25.0.5",
     "typescript": "5.9.3",
-    "vitest": "4.1.9"
+    "vitest": "4.1.11"
   },
   "peerDependencies": {
     "@opentelemetry/api": ">=1.0",

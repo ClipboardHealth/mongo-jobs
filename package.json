@@ -54,7 +54,7 @@
     "@tsconfig/node24": "24.0.4",
     "@tsconfig/strictest": "2.0.8",
     "@types/node": "24.13.2",
-    "@vitest/coverage-v8": "4.1.9",
+    "@vitest/coverage-v8": "4.1.11",
     "mongodb": "6.20.0",
     "mongoose": "8.24.7",
     "oxfmt": "0.78.0",

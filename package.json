@@ -58,7 +58,7 @@
     "mongodb": "6.20.0",
     "mongoose": "8.24.7",
     "oxfmt": "0.78.0",
-    "oxlint": "1.93.0",
+    "oxlint": "1.94.0",
     "semantic-release": "25.0.5",
     "typescript": "5.9.3",
     "vitest": "4.1.11"

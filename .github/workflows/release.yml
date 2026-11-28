@@ -39,7 +39,7 @@ jobs:
       # elevated credentials that can bypass branch protection on main
       # (the default GITHUB_TOKEN cannot, and its pushes never trigger workflows).
       - id: token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3
         with:
           app-id: ${{ secrets.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
@@ -54,9 +54,9 @@ jobs:
           persist-credentials: false
           token: ${{ steps.token.outputs.token }}
       - name: Install tools from mise.toml
-        uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
+        uses: jdx/mise-action@90f833d396d0cc3674b631d2d225e306476c303a # v5.2.10
         with:
-          version: 2026.11.0
+          version: 2026.11.12
           install_args: node npm
         env:
           MISE_USE_VERSIONS_HOST: "false"
